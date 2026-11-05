@@ -1324,7 +1324,7 @@ Id is this audit's row number. `carried` means the first audit's Match stands, n
 | W758 | GUID-9C55293D | 2c "Click again to place the dimension" | Partial | Fixed | Click on the X axis places; 62 applied. |
 | W759 | GUID-9C55293D | 2d-e Type 62 mm, Enter | Match | Match | Tutorial re-walked end to end. |
 | W760 | GUID-9C55293D | 2f Finish Sketch | Match | Match | Tutorial re-walked end to end. |
-| W761 | GUID-9C55293D | Tip: Home View next to the ViewCube | Missing | Fixed | Home View button. ViewCube is N/A. |
+| W761 | GUID-9C55293D | Tip: Home View next to the ViewCube | Missing | Fixed | Home View button, and since 5 Nov the ViewCube with its own Home icon (`e2e/viewcube.spec.ts`). |
 | W762 | GUID-9C55293D | 3 Press Pull, Extrude 8 mm | N/A-3D | N/A-3D | Stop point. |
 | W763 | GUID-9C55293D | 4a-b Create Sketch, top of cylinder | Match | Match | Tutorial re-walked end to end. |
 | W764 | GUID-9C55293D | 4c-d centre on origin | Match | Match | Tutorial re-walked end to end. |
@@ -1436,7 +1436,7 @@ Id is this audit's row number. `carried` means the first audit's Match stands, n
 | W870 | GUID-52E8728C | T3 conclusion | No claim | No claim | Summary. |
 | W871 | GUID-EFAC0B74 | Fully defined: cannot drag; blue to black | Partial | Fixed | As W642. |
 | W872 | GUID-087596A4 | 1 new design, Create Sketch | Match | Match | Tutorial re-walked end to end. |
-| W873 | GUID-087596A4 | ViewCube Top, click top plane | N/A-3D | N/A-3D | No ViewCube. XY picked as its square in the Orbit view, named XY not Top. |
+| W873 | GUID-087596A4 | ViewCube Top, click top plane | N/A-3D | N/A-3D | Verdict as audited. Since 5 Nov the ViewCube's TOP looks down -Z and works while a plane is picked (`e2e/viewcube.spec.ts`); the plane is still its XY square, named XY not Top. |
 | W874 | GUID-087596A4 | 2 Center Rectangle via Create | Match | Match | Tutorial re-walked end to end. |
 | W875 | GUID-087596A4 | Tip: S key | Match | Match | Tutorial re-walked end to end. |
 | W876 | GUID-087596A4 | Click origin and sketch | Match | Match | Tutorial re-walked end to end. |

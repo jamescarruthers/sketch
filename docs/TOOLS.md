@@ -203,7 +203,10 @@ Distance was worked out). For 3D mode: `frame` (the plane looked at), `scene` (t
 `orbiting` (always in design mode, which is the Orbit view), `seen()` (what each other sketch shows here), `planeLines()` (the Other Planes lines drawn now) and `sceneToScreen(sketch, x, y)` (where a point is in the 3D view); wait
 for `swinging` to be false after an arrow, `V`, Finish Sketch or a plane pick, as `e2e/fold.spec.ts` does (`u.landed()`). Picking a plane for
 Create Sketch or Redefine Sketch Plane: `picking`, `pickHover` (the square lit), `planeSize` (the squares' size in mm) and
-`planeToScreen(plane, x, y)` (where a point of an origin plane, in its coordinates, is in the 3D view). `u.newSketch(plane)` clicks Create
+`planeToScreen(plane, x, y)` (where a point of an origin plane, in its coordinates, is in the 3D view). The ViewCube: `cube()` (where it
+is on the page, what is lit, and each face shown with which way its label's right and up run on screen) and `cubeToScreen(name, at)` (a
+page position that picks `top`, `front-right`, `top-front-right` and so on, through the cube's own projection; a face's at `(s, t)` of it),
+as `e2e/viewcube.spec.ts` uses them. `u.newSketch(plane)` clicks Create
 Sketch and then `u.pickPlane(plane)`, which clicks inside that square, 4/5 of the way along each side, where nothing is in front of it
 from Home. Never change state through it.
 

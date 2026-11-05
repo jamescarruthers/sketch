@@ -222,6 +222,20 @@ describe('contrast', () => {
   });
 });
 
+describe('the ViewCube colours', () => {
+  it('has labels that read on a face and on the hover colour, and edges that show on the canvas, in both themes', () => {
+    for (const theme of ['light', 'dark'] as Theme[]) {
+      const p = paletteOf(theme);
+      const rgb = (key: keyof typeof p): Rgb => parseHex(p[key]) as Rgb;
+      for (const back of ['cubeFace', 'cubeHover'] as const) expect(contrast(rgb('cubeInk'), rgb(back)), `${theme} ${back}`).toBeGreaterThanOrEqual(4.5);
+      expect(contrast(rgb('cubeEdge'), rgb('background')), theme).toBeGreaterThanOrEqual(3);
+      // Quiet: a grey face, not far from the canvas, and the hover tells from it.
+      expect(contrast(rgb('cubeFace'), rgb('background')), theme).toBeLessThan(1.6);
+      expect(deltaE(rgb('cubeHover'), rgb('cubeFace')), theme).toBeGreaterThan(10);
+    }
+  });
+});
+
 describe('layer colours on a dark canvas', () => {
   const bg = parseHex(TOKENS.dark['--c-background']) as Rgb;
 

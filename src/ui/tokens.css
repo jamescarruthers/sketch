@@ -127,6 +127,11 @@
   --c-auto-hot: #c23be0;
   --c-comb: #a45de0;
   --c-curvature: #1a9e4b;
+  /* The ViewCube: quiet greys, its labels in ink, the part under the cursor a pale blue. */
+  --c-cube-face: #e9ebee;
+  --c-cube-edge: #858c94;
+  --c-cube-ink: #4c5258;
+  --c-cube-hover: #bfe4f4;
 }
 
 :root[data-theme='dark'] {
@@ -244,4 +249,8 @@
   --c-auto-hot: #e27af5;
   --c-comb: #c490f0;
   --c-curvature: #3fd17a;
+  --c-cube-face: #2a3036;
+  --c-cube-edge: #6b747d;
+  --c-cube-ink: #cfd5db;
+  --c-cube-hover: #285b73;
 }

@@ -925,8 +925,9 @@ test.describe('shell', () => {
 
     const idle = await page.evaluate(() => window.__sketch.frames);
     await page.waitForTimeout(300);
-    await page.mouse.move(s.x + 200, s.y - 200);
-    await page.mouse.move(s.x + 210, s.y - 210);
+    // Down and right, clear of the geometry and of the ViewCube up there, which lights under the cursor.
+    await page.mouse.move(s.x + 200, s.y + 200);
+    await page.mouse.move(s.x + 210, s.y + 210);
     await u.settle();
     expect(await page.evaluate(() => window.__sketch.frames)).toBe(idle);
     await context.close();

@@ -11,7 +11,7 @@ export const PALETTE_KEYS = [
   'windowBox', 'windowFill', 'crossingBox', 'crossingFill',
   'badgeFill', 'badgeEdge', 'badgeInk', 'badgeHoverFill', 'badgeSelectedFill', 'badgeCrossFill', 'badgeBadFill',
   'snapHalo', 'snapRing', 'handleFill', 'originInk', 'originFill', 'manip', 'manipActive', 'glyphFill',
-  'fade', 'autoHot', 'comb', 'curvature',
+  'fade', 'autoHot', 'comb', 'curvature', 'cubeFace', 'cubeEdge', 'cubeInk', 'cubeHover',
 ] as const;
 
 export type PaletteKey = typeof PALETTE_KEYS[number];

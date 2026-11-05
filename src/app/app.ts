@@ -59,6 +59,7 @@ import { isTextTarget, keyName, keyTable, type KeyBinding } from './keyboard';
 import { Selection } from './selection';
 import { applyInference, applyRimInference, localize, noInference, Snapper, type Inference } from './snap';
 import { View } from './view';
+import { CUBE_BOX, CUBE_HALF, CUBE_ICON, cubePick, targetName, targetNamed, targetPoint, targetTurn, visibleFaces, type CubeLayout, type CubeTarget, type Turn } from './viewcube';
 
 /** How near a label (screen px) a click counts as picking that dimension. */
 const SHOWN_DIM_PX = 26;
@@ -107,6 +108,9 @@ export interface Command {
 }
 
 const CLICK_TRAVEL = 4;
+/** The ViewCube's clearance from the canvas's edges, and from a panel it sits beside, in CSS px. */
+const CUBE_MARGIN = 8;
+const CUBE_GAP = 8;
 const UI_KEY = 'sketch.ui';
 /** A point of a Curvature curve moved this far (mm) on opening has changed; less is the rounding of a solve. */
 const SETTLED = 1e-6;
@@ -164,6 +168,8 @@ export class App {
   pickHover: Plane | null = null;
   /** The plane line under the cursor in Sketch mode, drawn lit. */
   planeHover: { p: Vec2; d: Vec2; ids: Id[] } | null = null;
+  /** The face, edge or corner of the ViewCube under the cursor, by name, drawn lit. */
+  cubeHover: string | null = null;
   readonly view = new View();
   readonly selection = new Selection();
   settings: Settings = {
@@ -273,6 +279,13 @@ export class App {
   private reach = 50;
   /** The camera is swinging: input waits until it lands. */
   private swing: { land: () => void } | null = null;
+  /** Where the ViewCube was last drawn, on the canvas, or null when there was no room for it. */
+  private cube: CubeLayout | null = null;
+  /** A press on the ViewCube: a click turns the camera to what was under it, a drag orbits. */
+  private cubePress: { last: Vec2; travel: number; target: CubeTarget } | null = null;
+  /** The canvas cursor from before the ViewCube took it, to give back. */
+  private cubeCursor = '';
+  private readonly cubeHome = document.createElement('button');
   /** Other sketches as the one on `frame` sees them, kept until that frame or they change. */
   private readonly seen = new Map<Id, { from: Sketch; view: Sketch }>();
 
@@ -325,7 +338,14 @@ export class App {
     orbit.innerHTML = icon('orbit');
     orbit.onclick = () => this.run('orbit');
     this.on('mode', () => orbit.setAttribute('aria-pressed', String(!!this.orbit)));
-    this.stage.append(home, orbit);
+    // The ViewCube's own Home, by its top left; placeCube puts it there.
+    this.cubeHome.className = 'cube-home icon-btn';
+    this.cubeHome.title = 'Home: isometric, from front right above';
+    this.cubeHome.setAttribute('aria-label', 'ViewCube Home');
+    this.cubeHome.innerHTML = icon('home');
+    this.cubeHome.style.display = 'none';
+    this.cubeHome.onclick = () => this.cubeGoHome();
+    this.stage.append(home, orbit, this.cubeHome);
     this.statusBar = new StatusBar(this);
     shell.append(this.toolbar.root, this.stage, this.statusBar.root);
 
@@ -1360,16 +1380,17 @@ export class App {
     else if (!this.orbit) this.enterOrbit();
   }
 
-  private enterOrbit(): void {
+  /** Open the Orbit view from the sketch, swinging out to `to` over `ms`: Home round everything shown, unless told otherwise. */
+  private enterOrbit(to?: Camera, ms = ORBIT_MS): void {
     if (this.mode === 'sketch') this.setTool('select');
     const back = { frame: structuredClone(this.frame), cx: this.view.cx, cy: this.view.cy, ppm: this.view.ppm };
     if (this.mode === 'sketch' && this.activeId) this.remember(this.activeId, back);
     this.orbit = { back };
     const from = facing(this.frame, this.view);
-    const to = this.homeCamera();
+    const end = to ?? this.homeCamera();
     this.status(ORBIT_PROMPT);
-    this.play((t) => between(from, to, easeInOut(t)), ORBIT_MS, () => {
-      this.view.ppm = to.ppm;
+    this.play((t) => (t >= 1 ? end : between(from, end, easeInOut(t))), ms, () => {
+      this.view.ppm = end.ppm;
     });
   }
 
@@ -1643,6 +1664,151 @@ export class App {
     const q = new FrameView(this.scene, s.frame, this.view).toScreen(p);
     const box = this.canvas.getBoundingClientRect();
     return { x: q.x + box.left, y: q.y + box.top };
+  }
+
+  // The ViewCube (src/app/viewcube.ts)
+
+  /** Which way the camera looks, for the ViewCube: the 3D view's way, else straight at the sketch's plane. */
+  cubeTurn(): Turn {
+    const cam = this.scene ?? facing(this.frame, this.view);
+    return { right: { ...cam.right }, up: { ...cam.up } };
+  }
+
+  /**
+   * Where the ViewCube goes, as the frame is drawn: the canvas's top right, or left of the Sketch Palette and of any
+   * other panel that would cover it there, with its Home icon just outside its top left. Null, and nothing shown,
+   * when that would run into the panels on the left or off the canvas.
+   */
+  placeCube(): CubeLayout | null {
+    const box = this.canvas.getBoundingClientRect();
+    const rects = (selector: string): DOMRect[] => [...this.stage.querySelectorAll<HTMLElement>(selector)]
+      .map((el) => el.getBoundingClientRect()).filter((r) => r.width > 0 && r.height > 0);
+    const top = box.top + CUBE_MARGIN;
+    let right = box.right - CUBE_MARGIN;
+    const wide = CUBE_BOX + CUBE_ICON;
+    const meets = (r: DOMRect): boolean => r.left < right && r.right > right - wide && r.top < top + CUBE_BOX && r.bottom > top;
+    const beside = rects('.palette, .dialog, .rescue-note, .toolbox');
+    // Step left past each panel in the way until none is.
+    for (let moved = true; moved;) {
+      moved = false;
+      for (const r of beside) {
+        if (!meets(r)) continue;
+        right = r.left - CUBE_GAP;
+        moved = true;
+      }
+    }
+    const room = right - wide >= box.left + CUBE_MARGIN && !rects('.left-column > *').some(meets);
+    this.cube = room && box.width > 0 ? { x: right - CUBE_BOX / 2 - box.left, y: top + CUBE_BOX / 2 - box.top, half: CUBE_HALF } : null;
+    const home = this.cubeHome.style;
+    home.display = this.cube ? '' : 'none';
+    if (this.cube) {
+      home.left = `${right - wide - box.left}px`;
+      home.top = `${top - box.top}px`;
+    }
+    if (!this.cube && this.cubeHover) this.cubeHover = null;
+    return this.cube;
+  }
+
+  /** The face, edge or corner of the ViewCube under a canvas position, through its own projection. */
+  private cubeUnder(screen: Vec2): CubeTarget | null {
+    return this.cube ? cubePick(this.cubeTurn(), this.cube, screen) : null;
+  }
+
+  /**
+   * The part of the ViewCube under the cursor lights, and the cube takes the cursor from the canvas: nothing under
+   * it lights meanwhile. True while the cursor is on the cube.
+   */
+  private hoverCube(screen: Vec2): boolean {
+    const target = this.cubeUnder(screen);
+    const name = target ? targetName(target) : null;
+    if (name !== this.cubeHover) {
+      if (name && !this.cubeHover) this.cubeCursor = this.canvas.style.cursor;
+      if (!name) this.canvas.style.cursor = this.cubeCursor;
+      this.cubeHover = name;
+      this.invalidate();
+    }
+    if (!name) return false;
+    this.canvas.style.cursor = 'pointer';
+    this.tip.style.display = 'none';
+    if (this.orbitHover || this.pickHover || this.hover || this.planeHover || this.inference) {
+      this.orbitHover = null;
+      this.pickHover = null;
+      this.hover = null;
+      this.planeHover = null;
+      this.inference = null;
+      this.invalidate();
+    }
+    return true;
+  }
+
+  /** A drag on the ViewCube orbits, as one on the view does. From a sketch it opens the Orbit view first, looking the same way. */
+  private cubeDrag(e: PointerEvent): void {
+    const press = this.cubePress;
+    if (!press) return;
+    const dx = e.clientX - press.last.x;
+    const dy = e.clientY - press.last.y;
+    press.travel += Math.hypot(dx, dy);
+    press.last = { x: e.clientX, y: e.clientY };
+    if (press.travel < CLICK_TRAVEL) return;
+    if (!this.orbit) this.enterOrbit(facing(this.frame, this.view), 0);
+    if (!this.scene || this.swing) return;
+    this.scene = orbitBy(this.scene, dx, dy);
+    this.homed = null;
+    this.cubeHover = null;
+    this.invalidate();
+  }
+
+  /**
+   * A click on the ViewCube: the camera swings round to look from there, about the middle of the view. From a
+   * sketch, the Orbit view opens looking that way, round everything shown, as `V` opens it, so `V` or Esc goes back.
+   */
+  private turnTo(d: CubeTarget): void {
+    this.hurry();
+    if (this.swing) return;
+    const turnTo = targetTurn(d, this.cubeTurn());
+    this.cubeHover = null;
+    if (!this.orbit || !this.scene) {
+      this.enterOrbit(this.homeCamera(turnTo));
+      return;
+    }
+    const from = this.scene;
+    const to: Camera = { ...from, right: turnTo.right, up: turnTo.up };
+    this.homed = null;
+    this.play((t) => (t >= 1 ? to : between(from, to, easeInOut(t))), ORBIT_MS, () => {
+      // It lands where it was going; nothing else changes.
+    });
+  }
+
+  /** The ViewCube's Home: Home View in the Orbit view; from a sketch, the Orbit view at Home, as `V` opens it. */
+  private cubeGoHome(): void {
+    this.hurry();
+    if (this.orbit) this.fit();
+    else if (this.mode === 'sketch') this.enterOrbit();
+  }
+
+  /** The ViewCube for tests: where it is on the page, what is lit, and each label shown, with which way is up for it on screen. */
+  private cubeOnPage(): CubeView | null {
+    const cube = this.cube;
+    if (!cube) return null;
+    const box = this.canvas.getBoundingClientRect();
+    const t = this.cubeTurn();
+    const n = cross3(t.right, t.up);
+    return {
+      x: cube.x + box.left, y: cube.y + box.top, half: cube.half, size: CUBE_BOX, hover: this.cubeHover,
+      faces: visibleFaces(t).map((f) => ({
+        label: f.label, facing: dot3(f.n, n),
+        up: { x: dot3(f.up, t.right), y: -dot3(f.up, t.up) }, right: { x: dot3(f.right, t.right), y: -dot3(f.right, t.up) },
+      })),
+    };
+  }
+
+  /** A page position that picks the named face, edge or corner, if it shows; a face's at (s, t) of it when given. */
+  private cubeToClient(name: string, at?: { s: number; t: number }): Vec2 | null {
+    const d = targetNamed(name);
+    const p = d && this.cube ? targetPoint(this.cubeTurn(), this.cube, d, at) : null;
+    if (!p) return null;
+    const box = this.canvas.getBoundingClientRect();
+    return { x: p.x + box.left, y: p.y + box.top };
   }
 
   // -------------------------------------------------------------------------
@@ -2683,6 +2849,15 @@ export class App {
       if (e.button === 2) this.hurry();
       if (this.swing) return;
       c.setPointerCapture(e.pointerId);
+      // The ViewCube takes a left press on it before the canvas does, in either mode and while a plane is picked.
+      if (e.button === 0 && !this.spaceHeld && !this.press) {
+        const box = c.getBoundingClientRect();
+        const target = this.cubeUnder({ x: e.clientX - box.left, y: e.clientY - box.top });
+        if (target) {
+          this.cubePress = { last: { x: e.clientX, y: e.clientY }, travel: 0, target };
+          return;
+        }
+      }
       if (e.button === 1 || (e.button === 0 && this.spaceHeld)) {
         this.pan = { x: e.clientX, y: e.clientY };
         e.preventDefault();
@@ -2716,6 +2891,10 @@ export class App {
     });
     c.addEventListener('pointermove', (e) => {
       if (this.swing) return;
+      if (this.cubePress) {
+        this.cubeDrag(e);
+        return;
+      }
       if (this.pan) {
         if (this.orbit && this.scene) {
           this.scene = panCamera(this.scene, e.clientX - this.pan.x, e.clientY - this.pan.y);
@@ -2724,6 +2903,10 @@ export class App {
         this.pan = { x: e.clientX, y: e.clientY };
         this.invalidate();
         return;
+      }
+      if (!this.press && !this.orbitPress) {
+        const box = c.getBoundingClientRect();
+        if (this.hoverCube({ x: e.clientX - box.left, y: e.clientY - box.top })) return;
       }
       if (this.orbit) {
         this.orbitMove(e);
@@ -2750,6 +2933,12 @@ export class App {
       if (this.press || !selecting || before !== this.inference) this.invalidate();
     });
     c.addEventListener('pointerup', (e) => {
+      if (this.cubePress && e.button === 0) {
+        const press = this.cubePress;
+        this.cubePress = null;
+        if (press.travel < CLICK_TRAVEL) this.turnTo(press.target);
+        return;
+      }
       if (this.pan) {
         this.pan = null;
         return;
@@ -2799,8 +2988,10 @@ export class App {
     });
     c.addEventListener('pointerleave', () => {
       this.tip.style.display = 'none';
-      if (this.pickHover) {
+      if (this.pickHover || this.cubeHover) {
+        if (this.cubeHover) this.canvas.style.cursor = this.cubeCursor;
         this.pickHover = null;
+        this.cubeHover = null;
         this.invalidate();
       }
       if (this.press) return;
@@ -3148,6 +3339,8 @@ export class App {
       })),
       sceneToScreen: (id, x, y) => app.sceneToClient(id, { x, y }),
       planeLines: () => app.planeLines().map((l) => ({ p: { ...l.p }, d: { ...l.d }, sketches: [...l.ids] })),
+      cube: () => app.cubeOnPage(),
+      cubeToScreen: (name, at) => app.cubeToClient(name, at),
     };
   }
 }
@@ -3214,5 +3407,21 @@ export interface SketchDebug {
   sceneToScreen(sketch: Id, x: number, y: number): Vec2 | null;
   /** The plane lines drawn in Sketch mode: a point, a unit direction and the sketches on each. */
   planeLines(): { p: Vec2; d: Vec2; sketches: Id[] }[];
+  /** The ViewCube as last drawn, or null when there was no room for it. */
+  cube(): CubeView | null;
+  /** A page position that picks a face, edge or corner of the ViewCube by name (`top`, `front-right`, `top-front-right`), if it shows. */
+  cubeToScreen(name: string, at?: { s: number; t: number }): Vec2 | null;
+}
+
+export interface CubeView {
+  /** Its centre on the page, half its edge and the square it takes, in CSS px. */
+  x: number;
+  y: number;
+  half: number;
+  size: number;
+  /** What is lit under the cursor. */
+  hover: string | null;
+  /** The faces shown, nearest square-on first: how square-on, and which way their labels' right and up run on screen, Y down. */
+  faces: { label: string; facing: number; right: Vec2; up: Vec2 }[];
 }
 
