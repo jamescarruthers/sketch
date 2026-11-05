@@ -1,0 +1,30 @@
+[package]
+name = "sketch-solver"
+version = "0.1.0"
+edition = "2024"
+description = "Sketch constraint solver: maps the document model onto kcl-ezpz"
+license = "MIT"
+publish = false
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+kcl-ezpz = "=0.2.18"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+wasm-bindgen = "=0.2.129"
+
+# ezpz with an experimental DogLeg step, off by default. See vendor/kcl-ezpz/src/solver/dogleg.rs.
+[patch.crates-io]
+kcl-ezpz = { path = "vendor/kcl-ezpz" }
+
+[profile.release]
+opt-level = 3
+lto = true
+codegen-units = 1
+panic = "abort"
+
+# wasm-opt is not installed on the build machine.
+[package.metadata.wasm-pack.profile.release]
+wasm-opt = false

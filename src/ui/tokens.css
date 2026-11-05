@@ -1,0 +1,257 @@
+/*
+ * Every colour the app draws, in one place. The DOM reads these as custom properties. The canvas reads
+ * the `--c-*` ones through src/render/palette.ts, which parses this file, so the two cannot drift.
+ * Values are literals (no var()), because that parser is a regex over this text.
+ *
+ * `:root` is Light and `:root[data-theme='dark']` is Dark. src/app/theme.ts sets `data-theme` to the
+ * resolved theme, and index.html sets it before first paint. Every token appears in both blocks.
+ * Not here, on purpose: layer colours (the user's data), and SVG, DXF and print output (true colours).
+ */
+:root {
+  color-scheme: light;
+
+  /* Surfaces and text */
+  --ink: #2c3036;
+  --ink-2: #5a6168;
+  --ink-3: #8b929a;
+  --line: #d6d9dd;
+  --line-2: #e6e8eb;
+  --panel: #ffffff;
+  --panel-2: #f3f4f6;
+  --head: #e9ebee;
+  --field: #fff;
+  --overlay: rgba(255, 255, 255, .96);
+  --hover-bg: rgba(0, 0, 0, .07);
+  --hover-bg-2: rgba(0, 0, 0, .08);
+  --control-edge: #ccd0d5;
+  --btn-edge: #b9bfc6;
+  --check: #4d5560;
+  --swatch-edge: rgba(0, 0, 0, .35);
+  --shadow: 0 1px 4px rgba(25, 30, 36, .22);
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, .25);
+  --shadow-hud: 0 1px 2px rgba(0, 0, 0, .15);
+  --shadow-chip: 0 1px 2px rgba(0, 0, 0, .3);
+  --shadow-lg: 0 3px 14px rgba(25, 30, 36, .28);
+  --shadow-dialog: 0 2px 10px rgba(25, 30, 36, .28);
+
+  /* Accent, primary buttons, status */
+  --accent: #0696d7;
+  --accent-soft: #dff1fa;
+  --accent-edge: #b7dff2;
+  --accent-active: #cfeaf8;
+  --finish-bg: #e9f4fa;
+  --primary: #0696d7;
+  --primary-edge: #0780b8;
+  --primary-hover: #0589c5;
+  --on-primary: #fff;
+  --green: #2aa55a;
+  --warn: #c7472e;
+  --done: #1f7d3e;
+  --over: #d9272e;
+  --locked-bg: rgba(217, 39, 46, .14);
+  --purple: #8a3fc7;
+  --lock: #cf3a3a;
+  --notice-edge: #e0a100;
+  --notice-bg: #fff7dd;
+
+  /* Floating boxes: value fields, cursor tip, marking menu, plane picker, print preview */
+  --hud-bg: rgba(255, 255, 255, .92);
+  --hud-edge: #9cc9e2;
+  --tip-bg: rgba(255, 255, 255, .92);
+  --pill-bg: #8b929a;
+  --on-pill: #fff;
+  --marking-hub-edge: rgba(70, 80, 90, .55);
+  --marking-hub-bg: rgba(255, 255, 255, .8);
+  --plane-backdrop: rgba(246, 247, 248, .72);
+  --plane-ink: #3a4047;
+  --plane-xy: #4c8fd6;
+  --plane-yz: #5fae6e;
+  --plane-zx: #d0715e;
+  --preview-backdrop: #d9dcdf;
+
+  /* Icons */
+  --ic-blue: #1579c8;
+  --ic-red: #cf3a3a;
+  --ic-ink: #4c5258;
+  --ic-orange: #e8730c;
+  --ic-green: #2aa55a;
+  --ic-white: #fff;
+  --ic-hole: #fff;
+  --ic-muted: #8a9098;
+
+  /* Canvas */
+  --c-background: #f6f7f8;
+  --c-grid-minor: #e7e9eb;
+  --c-grid-major: #d3d6da;
+  --c-axis-x: #d9534f;
+  --c-axis-y: #4caf50;
+  --c-axis-z: #3f7fd0;
+  --c-plane-line: #0c95b0;
+  --c-free: #0a84d6;
+  --c-constrained: #111111;
+  --c-construction: #e8730c;
+  --c-projected: #8a3fc7;
+  --c-fixed: #1a9e4b;
+  --c-error: #d9272e;
+  --c-lost: #f2a516;
+  --c-cross: #c28a00;
+  --c-template: #a7aeb6;
+  --c-hover: rgba(120, 220, 245, .55);
+  --c-hover-halo: #e3f5fb;
+  --c-selected: #1f9bff;
+  --c-profile: rgba(90, 170, 240, .25);
+  --c-preview: #0a84d6;
+  --c-guide: #7f8a94;
+  --c-dimension: #3a3f45;
+  --c-dimension-muted: #7b828a;
+  --c-label-bg: rgba(246, 247, 248, .9);
+  --c-tip-bg: rgba(246, 247, 248, .86);
+  --c-dot-hole: #fff;
+  --c-interior-edge: #8d949b;
+  --c-interior-fill: #b9bec4;
+  --c-window-box: #2178d6;
+  --c-window-fill: rgba(33, 120, 214, .10);
+  --c-crossing-box: #2e9e5b;
+  --c-crossing-fill: rgba(46, 158, 91, .10);
+  --c-badge-fill: #eceef0;
+  --c-badge-edge: #b8bdc3;
+  --c-badge-ink: #4c5258;
+  --c-badge-hover-fill: #ddf4fb;
+  --c-badge-selected-fill: #cfe8ff;
+  --c-badge-cross-fill: #fff0c7;
+  --c-badge-bad-fill: #fbdcdc;
+  --c-snap-halo: rgba(31, 155, 255, .25);
+  --c-snap-ring: #fff;
+  --c-handle-fill: #cfe8ff;
+  --c-origin-ink: #4a4f55;
+  --c-origin-fill: #fff;
+  --c-manip: #0a84d6;
+  --c-manip-active: #0b5fa5;
+  --c-glyph-fill: rgba(10, 132, 214, .75);
+  --c-fade: rgba(255, 255, 255, .72);
+  --c-auto-hot: #c23be0;
+  --c-comb: #a45de0;
+  --c-curvature: #1a9e4b;
+}
+
+:root[data-theme='dark'] {
+  color-scheme: dark;
+
+  --ink: #e6e9ec;
+  --ink-2: #b4bbc2;
+  --ink-3: #9ba3ab;
+  --line: #3b4249;
+  --line-2: #2e343a;
+  --panel: #1f2328;
+  --panel-2: #262b31;
+  --head: #2d333a;
+  --field: #14181c;
+  --overlay: rgba(31, 35, 40, .96);
+  --hover-bg: rgba(255, 255, 255, .08);
+  --hover-bg-2: rgba(255, 255, 255, .10);
+  --control-edge: #4b535b;
+  --btn-edge: #4b535b;
+  --check: #9aa4ae;
+  --swatch-edge: rgba(255, 255, 255, .4);
+  --shadow: 0 1px 4px rgba(0, 0, 0, .6);
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, .6);
+  --shadow-hud: 0 1px 2px rgba(0, 0, 0, .5);
+  --shadow-chip: 0 1px 2px rgba(0, 0, 0, .6);
+  --shadow-lg: 0 3px 14px rgba(0, 0, 0, .65);
+  --shadow-dialog: 0 2px 10px rgba(0, 0, 0, .65);
+
+  --accent: #52b8ee;
+  --accent-soft: #1b3a4d;
+  --accent-edge: #2f6d8f;
+  --accent-active: #21506b;
+  --finish-bg: #1b3340;
+  --primary: #0a6ba3;
+  --primary-edge: #3b9bd0;
+  --primary-hover: #0c7bb9;
+  --on-primary: #fff;
+  --green: #3cc476;
+  --warn: #ff8068;
+  --done: #4fc47f;
+  --over: #ff7479;
+  --locked-bg: rgba(255, 116, 121, .22);
+  --purple: #b98af0;
+  --lock: #ff7b7b;
+  --notice-edge: #d6a21a;
+  --notice-bg: #3a3118;
+
+  --hud-bg: rgba(31, 35, 40, .94);
+  --hud-edge: #2f6d8f;
+  --tip-bg: rgba(38, 43, 49, .94);
+  --pill-bg: #4a525a;
+  --on-pill: #fff;
+  --marking-hub-edge: rgba(190, 200, 210, .6);
+  --marking-hub-bg: rgba(31, 35, 40, .85);
+  --plane-backdrop: rgba(22, 25, 29, .78);
+  --plane-ink: #e6e9ec;
+  --plane-xy: #5b9ee6;
+  --plane-yz: #6fc27f;
+  --plane-zx: #e0836f;
+  --preview-backdrop: #14171a;
+
+  --ic-blue: #4aa3ea;
+  --ic-red: #ff7b7b;
+  --ic-ink: #b4bbc2;
+  --ic-orange: #ff9a3d;
+  --ic-green: #2aa55a;
+  --ic-white: #fff;
+  --ic-hole: #1f2328;
+  --ic-muted: #8f98a1;
+
+  --c-background: #16191d;
+  --c-grid-minor: #1f2429;
+  --c-grid-major: #2b3138;
+  --c-axis-x: #e8605c;
+  --c-axis-y: #58c05c;
+  --c-axis-z: #5b9ee6;
+  --c-plane-line: #3bc9db;
+  --c-free: #4aa8f5;
+  --c-constrained: #eef1f4;
+  --c-construction: #ff9a3d;
+  --c-projected: #b98af0;
+  --c-fixed: #3fd17a;
+  --c-error: #ff6b6b;
+  --c-lost: #ffbe3d;
+  --c-cross: #e6d83c;
+  --c-template: #7d8791;
+  --c-hover: rgba(110, 200, 235, .42);
+  --c-hover-halo: #1c3a4a;
+  --c-selected: #8fd2ff;
+  --c-profile: rgba(90, 170, 240, .20);
+  --c-preview: #4aa8f5;
+  --c-guide: #8b96a0;
+  --c-dimension: #cdd2d7;
+  --c-dimension-muted: #98a1aa;
+  --c-label-bg: rgba(22, 25, 29, .88);
+  --c-tip-bg: rgba(22, 25, 29, .86);
+  --c-dot-hole: #16191d;
+  --c-interior-edge: #a0a8b0;
+  --c-interior-fill: #5d666f;
+  --c-window-box: #5aa9ff;
+  --c-window-fill: rgba(90, 169, 255, .12);
+  --c-crossing-box: #4cc98a;
+  --c-crossing-fill: rgba(76, 201, 138, .12);
+  --c-badge-fill: #2a3036;
+  --c-badge-edge: #4d565f;
+  --c-badge-ink: #cfd5db;
+  --c-badge-hover-fill: #24475a;
+  --c-badge-selected-fill: #1f4a66;
+  --c-badge-cross-fill: #4a3d12;
+  --c-badge-bad-fill: #4d2427;
+  --c-snap-halo: rgba(124, 202, 255, .28);
+  --c-snap-ring: #16191d;
+  --c-handle-fill: #1f4a66;
+  --c-origin-ink: #cfd5db;
+  --c-origin-fill: #16191d;
+  --c-manip: #4aa8f5;
+  --c-manip-active: #9bd4ff;
+  --c-glyph-fill: rgba(74, 168, 245, .75);
+  --c-fade: rgba(22, 25, 29, .72);
+  --c-auto-hot: #e27af5;
+  --c-comb: #c490f0;
+  --c-curvature: #3fd17a;
+}

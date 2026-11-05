@@ -1,0 +1,71 @@
+[package]
+name = "kcl-ezpz"
+version = "0.2.18"
+edition = "2024"
+description = "A constraint solver for KCL and Zoo Design Studio"
+repository = "https://github.com/KittyCAD/ezpz"
+readme = "README.md"
+keywords = ["constraint-solver", "cad", "geometry"]
+categories = ["mathematics"]
+license = "MIT"
+
+[features]
+fuzz = ["dep:arbitrary"]
+residual-viz = ["dep:image"]
+dbg-jac = []
+unstable-exhaustive = []
+
+
+[dependencies]
+image = { version = "0.25", optional = true, default-features = false, features = ["png"] }
+arbitrary = { version = "1.4.2", features = ["derive"], optional = true }
+faer = { version = "0.23.2", default-features = false, features = ["std", "sparse-linalg"] }
+indexmap = "2.11.0"
+libm = "0.2.15"
+mutants = "0.0.3"
+thiserror = "2.0.14"
+winnow = { version = "0.7.13" }
+
+[dev-dependencies]
+criterion = "0.8.1"
+proptest = "1.9.0"
+twenty-twenty = "0.8"
+
+
+[[bench]]
+name = "solver_bench"
+harness = false
+
+[lints.rust]
+missing_docs = "warn"
+elided_lifetimes_in_paths = "warn"
+trivial_numeric_casts = "warn"
+unnameable_types = "warn"
+# unreachable_pub = "warn"
+unused_extern_crates = "warn"
+unused_import_braces = "warn"
+unused_qualifications = "warn"
+
+[lints.clippy]
+manual_assert = "warn"
+float_cmp = "warn"
+needless_collect = "warn"
+explicit_iter_loop = "warn"
+# alloc_instead_of_core = "warn"
+assertions_on_result_states = "warn"
+cloned_instead_of_copied = "warn"
+dbg_macro = "warn"
+lossy_float_literal = "warn"
+manual_let_else = "warn"
+or_fun_call = "warn"
+redundant_clone = "warn"
+result_large_err = "allow"
+# std_instead_of_core = "warn"
+upper_case_acronyms = "warn"
+# use_self = "warn"
+semicolon_if_nothing_returned = "warn"
+doc_markdown = "warn"
+struct_field_names = "warn"
+trivially_copy_pass_by_ref = "warn"
+elidable_lifetime_names = "warn"
+

@@ -1,0 +1,10 @@
+node_modules/
+dist/
+solver/target/
+src/solver/pkg/
+test-results/
+playwright-report/
+.DS_Store
+*.log
+# Autodesk Fusion help pages used as the spec: their copyright, kept local.
+reference/
