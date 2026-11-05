@@ -200,8 +200,12 @@ read-only handle for assertions: `design()`, `sketch()`, `analysis()`, `selectio
 `inference()`, `appearance(id)`, `badges()`, `labels()`, `drawnPoints()`, `textOutlines(id, text)`,
 `frames`, `dirty` (unsaved changes) and `highlight` (ids lit without being selected) and `minDistanceRuns` (how often the status bar's Min
 Distance was worked out). For 3D mode: `frame` (the plane looked at), `scene` (the 3D camera, or null in plan), `swinging`,
-`orbiting`, `seen()` (what each other sketch shows here), `planeLines()` (the Other Planes lines drawn now) and `sceneToScreen(sketch, x, y)` (where a point is in the 3D view); wait
-for `swinging` to be false after an arrow or `V`, as `e2e/fold.spec.ts` does. Never change state through it.
+`orbiting` (always in design mode, which is the Orbit view), `seen()` (what each other sketch shows here), `planeLines()` (the Other Planes lines drawn now) and `sceneToScreen(sketch, x, y)` (where a point is in the 3D view); wait
+for `swinging` to be false after an arrow, `V`, Finish Sketch or a plane pick, as `e2e/fold.spec.ts` does (`u.landed()`). Picking a plane for
+Create Sketch or Redefine Sketch Plane: `picking`, `pickHover` (the square lit), `planeSize` (the squares' size in mm) and
+`planeToScreen(plane, x, y)` (where a point of an origin plane, in its coordinates, is in the 3D view). `u.newSketch(plane)` clicks Create
+Sketch and then `u.pickPlane(plane)`, which clicks inside that square, 4/5 of the way along each side, where nothing is in front of it
+from Home. Never change state through it.
 
 The status bar's Min Distance reads the selection, not the tool, so a tool needs nothing to take part:
 select two objects and it shows. (Measure is the one that reads its own two picks, through `ctx.measure`.) A tool that moves geometry should do it through `ctx.solver.drag` or a

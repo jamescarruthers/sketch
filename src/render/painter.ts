@@ -74,10 +74,21 @@ export class Painter implements Preview {
 
   arc(c: Vec2, r: number, start: number, sweep: number, s?: Stroke): void {
     const { g, view } = this;
-    const q = view.toScreen(c);
     this.apply(s);
     g.beginPath();
-    g.arc(q.x, q.y, r * view.ppm, -start, -(start + sweep), sweep > 0);
+    if ('cam' in view) {
+      // Through a 3D camera (camera.ts FrameView) an arc seen at a slant is part of an ellipse: point by point.
+      const n = Math.max(8, Math.ceil(Math.abs(sweep) / (Math.PI / 48)));
+      for (let i = 0; i <= n; i++) {
+        const t = start + (sweep * i) / n;
+        const q = view.toScreen({ x: c.x + r * Math.cos(t), y: c.y + r * Math.sin(t) });
+        if (i === 0) g.moveTo(q.x, q.y);
+        else g.lineTo(q.x, q.y);
+      }
+    } else {
+      const q = view.toScreen(c);
+      g.arc(q.x, q.y, r * view.ppm, -start, -(start + sweep), sweep > 0);
+    }
     if (s?.fill) {
       g.fillStyle = s.fill;
       g.fill();

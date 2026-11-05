@@ -92,7 +92,8 @@ export class Browser {
         if (e.key === 'Escape') done(false);
       });
       input.onblur = () => {
-        if (this.renaming === id) done(true);
+        // A redraw of the tree takes the box away and puts a new one in its place: that is not the end of the rename.
+        if (this.renaming === id && input.isConnected) done(true);
       };
       row.append(eye, glyph, input);
       queueMicrotask(() => {
@@ -103,9 +104,10 @@ export class Browser {
       row.append(eye, glyph, el('span', 'tree-label', s.name));
     }
     row.onclick = () => {
-      if (app.planePicker.isOpen) app.planePicker.choose(id);
-      // In the Orbit view a click edits the sketch, and the camera swings round to face it.
-      else if (app.orbiting) app.enterSketch(id);
+      if (this.renaming === id) return;
+      // In the Orbit view, design mode's included, a click edits the sketch, and the camera swings round to face it.
+      // While a plane is picked it does so too, and the pick ends [ref GUID-0EEF7073].
+      if (app.orbiting) app.enterSketch(id);
     };
     row.ondblclick = () => app.enterSketch(id);
     row.oncontextmenu = (e) => {
@@ -159,7 +161,7 @@ export class Browser {
       else app.dimensionsInDesign.add(id);
       app.invalidate();
     });
-    item('Redefine Sketch Plane', () => app.planePicker.open((plane) => app.redefinePlane(id, plane)));
+    item('Redefine Sketch Plane', () => app.redefineSketchPlane(id));
     item('Rename', () => {
       this.renaming = id;
       this.render();

@@ -303,11 +303,34 @@ After a successful solve, the bridge regenerates `derivedFrom` geometry (offset 
 ## 5. Application flow
 
 **Design mode** [ref]: top bar shows the Solid tab. Browser tree lists `Origin` and `Sketches`.
-`Create Sketch` shows an isometric picker of the three origin planes; clicking one creates `Sketch N`
-and enters **Sketch mode**. Right-click sketch node: Edit Sketch, Export DXF, Show Dimensions,
-Delete, rename. Visibility eye toggles the sketch. A sketch is shown with the browser icon state:
-red lock when fully constrained [ref]. [adapt] Design mode shows, in plan, what the plane last looked
-at shows of each visible sketch (as in Sketch mode, below); the Orbit view shows them all in 3D.
+Right-click sketch node: Edit Sketch, Export DXF, Save as SVG, Show Dimensions, Redefine Sketch Plane,
+Rename, Delete. Visibility eye toggles the sketch. A sketch is shown with the browser icon state: red
+lock when fully constrained [ref]. [user] Design mode is the Orbit view (below), with nothing to go back
+to: the app opens in it at Home, fitted round what is shown and the origin plane squares (with nothing
+drawn, the squares). A reload with a sketch open reopens that sketch in plan instead. Clicking a
+sketch's geometry, or its row in the browser, edits it; the marking menu keeps Create Sketch, Undo,
+Redo and the workspace menus; `V` says design mode is the Orbit view already. Show Dimensions draws
+that sketch's dimensions in 3D, through its plane, and in Sketch mode on a sketch on the same plane, as
+before. Save as SVG, Export DXF and Print 1:1 from the File menu take the shown sketches on one plane:
+that of the sketch last edited (XY at first), else that of the last one shown, each in its own
+coordinates; from the browser they take that one sketch.
+
+*Create Sketch* [user, after ref GUID-0EEF7073] (toolbar, SOLID tab mid-sketch, marking menu) picks a
+plane in the Orbit view: from design mode it stays there, from a sketch the Orbit view opens and the
+sketch stays open until a plane is picked. The status line says `Select a plane for the sketch, or press
+Esc`. The three origin plane squares are the choices, not a sketch's own plane: the square under the
+cursor lights in the hover colour, its name (XY, YZ, XZ) shows on it and in the tip by the cursor. Where
+squares overlap on screen the one nearest the camera at the cursor takes it, by a ray through the cursor
+against each square (`planeAt` in `src/app/camera.ts`), whatever order they are drawn in. Sketch geometry
+is not picked meanwhile; a drag still orbits; a browser row ends the pick and edits that sketch.
+Clicking a square creates `Sketch N` on that plane in one undoable step and enters **Sketch mode**, the
+camera swinging round to face it, at the view the last sketch was left in (centre 0, 0 at 4 px/mm at
+first), as design mode's plan used to give it. Esc cancels: back to design mode, or swung back to the
+sketch it was started from as it was.
+
+*Redefine Sketch Plane* [ref GUID-3E407E01] picks the same way (`Select a plane for Sketch1, or press
+Esc`), then moves the sketch to that plane in one undoable step. From the sketch itself the camera then
+swings round to face it on the new plane, at the view it was left in; from design mode it stays there.
 
 **3D mode** [user]. *What a sketch sees.* On plane P a sketch shows, of every other visible sketch,
 the points that lie on P and the curves lying wholly in P, within 1e-6 mm (`src/model/seen.ts`). From a
@@ -346,22 +369,30 @@ snap target, a Project source or anything that selects, and geometry under it, t
 included, takes the click; it does take the click from an origin axis it runs along. Sketch Palette >
 Other Planes (on by default, kept with the other options) hides it. The Orbit view does not draw it.
 
-*Swing.* 340 ms, plus 140 ms for a roll; orthographic; at once under `prefers-reduced-motion`. Input
-waits until it lands. Meanwhile every visible sketch is drawn through its frame: points go through the
-camera one by one and are stroked on screen, so line weights hold and circles seen at a slant are
-ellipses. The origin planes and axes are drawn faint.
+*Swing.* 340 ms, plus 140 ms for a roll; orthographic; at once under `prefers-reduced-motion`. The
+canvas takes no input until it lands; a key command, button or menu item lands it at once and then runs,
+so Create Sketch straight after Finish Sketch is not lost. Meanwhile every visible sketch is drawn
+through its frame: points go through the camera one by one and are stroked on screen, so line weights
+hold and circles seen at a slant are ellipses. The origin planes and axes are drawn faint.
 
-*Orbit view* (`V`, or the button beside Home View). Every visible sketch in 3D, orthographic, with the
-origin planes and X, Y, Z axes faint. Drag orbits (across turns about Z, up and down tilts); the wheel
-zooms at the cursor and a two-finger drag or middle drag pans, as in plan. Home View and `F6` go to the
-isometric Home, from front right above (+X, -Y, +Z), round everything shown. Clicking a sketch's
-geometry, or its row in the browser, edits it, the camera swinging round to face it (fitted to it, or
-the view it was left in). `V` again or `Esc` goes back to the sketch it was opened from, facing it as it
-was. Tools and most keys wait while it is open; Undo, Redo, Save, Open, New, Print still work.
+*Orbit view* (design mode, and from a sketch `V` or the button beside Home View). Every visible sketch
+in 3D, orthographic, with the origin planes and X, Y, Z axes faint; the planes are squares from the
+origin, about half way to the furthest geometry (20 mm with none). Drag orbits (across turns about Z, up
+and down tilts); the wheel zooms at the cursor and a two-finger drag or middle drag pans, as in plan.
+Home View and `F6` go to the isometric Home, from front right above (+X, -Y, +Z), round everything shown
+and the plane squares. Clicking a sketch's geometry, or its row in the browser, edits it, the camera
+swinging round to face it: at the view it was last left in this session; else, from design mode, at the
+last sketch's view (4 px/mm on the origin at first) as design mode's plan used to give it, when any of
+it shows there; else fitted to it, clear of the panels Sketch mode shows. Opened from
+a sketch, `V` again or `Esc` goes back to it, facing it as it was; tools and most keys wait while it is
+open, and Undo, Redo, Save, Open, New, Print still work. A new or opened design goes to Home.
 
 **Sketch mode** [ref]: contextual Sketch tab highlighted, with panels Create, Modify, Constraints,
 Select, Finish Sketch (green check). The Sketch Palette floats top right. Finish Sketch appears on
-toolbar and palette. Finishing a sketch returns to Design mode.
+toolbar and palette. Finishing a sketch returns to Design mode, the camera swinging back out to the
+Orbit view, looking the way design mode looked when the sketch was opened from it (Home after a
+reload), refitted round what is shown. Leaving a sketch any other way (Delete, New, Open, an Undo that
+takes it away) goes there at once.
 
 Start the tool loop: `select` is the default tool. Every tool ends back in `select`.
 
@@ -413,9 +444,9 @@ event, and `overscroll-behavior: none` keeps a swipe that reaches the page from 
 | `Cmd/Ctrl+Z`, `Cmd/Ctrl+Shift+Z`, `Ctrl+Y` | Undo, redo | [fusion] |
 | `Cmd/Ctrl+A` | Select all | [fusion] |
 | `Cmd/Ctrl+P` | Print 1:1 | [user] |
-| `F6` | Look at / fit. In the Orbit view, Home (isometric) | [fusion] |
+| `F6` | Look at / fit. In the Orbit view, design mode's included, Home (isometric) | [fusion] |
 | `Up`, `Down`, `Left`, `Right` | Fold the sketch plane about the one selected line, the way the camera moves (section 5, 3D mode) | [user] |
-| `V` | Orbit view on and off | [user] |
+| `V` | Orbit view on and off, from a sketch. Design mode is the Orbit view | [user] |
 | hold `Cmd/Ctrl` | Suppress inference snapping while drawing | [fusion] |
 
 Shortcuts are ignored while an input has focus, except Enter, Esc, Tab.
@@ -780,7 +811,8 @@ alignment marks along the seams and page labels. Every page has a 100 mm scale b
 Browsers cannot force the printer's scale, so the dialog says to choose 100% or Actual size, not Fit to
 page, and to check the bar with a ruler. Construction, projected geometry and points follow the
 palette; dimensions are a dialog option. Both exports and print take the open sketch, or from the File
-menu in design mode every shown sketch in the frame looked at, each in its own coordinates.
+menu in design mode every shown sketch on the plane of the sketch last edited (else of the last one
+shown), each in its own coordinates.
 
 ## 10. Acceptance scenarios (`e2e/`, reference tutorials)
 

@@ -1,7 +1,7 @@
 // Acts like a user: real mouse and keyboard on the canvas, addressed in sketch coordinates.
 // `window.__sketch` is read only and is used for assertions and coordinate conversion, nothing else.
 import { expect, type Page } from '@playwright/test';
-import type { Curve, Design, Id, Line, Sketch } from '../src/model/types';
+import type { Curve, Design, Id, Line, Plane, Sketch } from '../src/model/types';
 
 export interface Xy { x: number; y: number }
 
@@ -17,12 +17,43 @@ export class SketchUser {
     await this.page.waitForFunction(() => !!window.__sketch);
   }
 
-  /** Design mode to a sketch on the XY plane through the UI. */
-  async newSketch(): Promise<void> {
+  /** Create Sketch, then a click on an origin plane's square in the Orbit view: a new sketch on it, landed and open. */
+  async newSketch(plane: Plane = 'XY'): Promise<void> {
+    await this.landed();
     await this.page.getByRole('button', { name: 'Create Sketch' }).first().click();
-    await this.page.locator('.plane[data-plane="XY"] polygon').click();
+    await this.pickPlane(plane);
     await expect(this.page.locator('.tab.active')).toHaveText('SKETCH');
     await this.settle();
+  }
+
+  /** Wait for the camera to stop swinging. */
+  async landed(): Promise<void> {
+    await this.page.waitForFunction(() => !window.__sketch.swinging);
+    await this.settle();
+  }
+
+  /** Where a point of an origin plane, in its coordinates, shows on the page in the 3D view. */
+  async planeScreen(plane: Plane, x: number, y: number): Promise<Xy> {
+    const at = await this.page.evaluate(([p, px, py]) => window.__sketch.planeToScreen(p as Plane, px as number, py as number), [plane, x, y] as const);
+    if (!at) throw new Error('not in the 3D view');
+    return at;
+  }
+
+  /**
+   * While a plane is picked: click inside `plane`'s square, at a point no other square is in front of from Home
+   * (4/5 of the way along each side), checking it lights first. Waits for the swing that follows.
+   */
+  async pickPlane(plane: Plane): Promise<void> {
+    await this.landed();
+    expect(await this.page.evaluate(() => window.__sketch.picking)).toBe(true);
+    const size = await this.page.evaluate(() => window.__sketch.planeSize);
+    const at = await this.planeScreen(plane, size * 0.8, size * 0.8);
+    await this.page.mouse.move(at.x, at.y, { steps: 2 });
+    await this.settle();
+    expect(await this.page.evaluate(() => window.__sketch.pickHover)).toBe(plane);
+    await this.page.mouse.down();
+    await this.page.mouse.up();
+    await this.landed();
   }
 
   async screen(p: Xy): Promise<Xy> {

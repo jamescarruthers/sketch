@@ -1,8 +1,8 @@
 // Draws one frame. Frames are requested on change only (App.invalidate); the camera's swing between
 // planes (App.play) asks for one per animation frame, and draws the 3D scene instead of the plan.
-import type { Curve, Dimension, Id, Point, Sketch, Vec3 } from '../model/types';
+import type { Curve, Dimension, Id, Plane, Point, Sketch, Vec3 } from '../model/types';
 import { ORIGIN } from '../model/types';
-import { PLANE_FRAMES, toWorld, v3 } from '../model/frames';
+import { PLANE_FRAMES, PLANE_NAMES, toWorld, v3 } from '../model/frames';
 import { FrameView, project, type Camera } from '../app/camera';
 import { curveEnds, curvePoints } from '../model/document';
 import { ownerLayer, pointLayer } from '../model/layers';
@@ -95,8 +95,9 @@ export class Renderer {
 
   /**
    * Every visible sketch through its frame, orthographic, with the origin planes and axes faint: the swing
-   * between planes and the Orbit view. Points go through the camera one by one and are stroked on screen,
-   * so lines keep their weight, and circles and arcs seen at a slant are ellipses.
+   * between planes and the Orbit view, which design mode is. Points go through the camera one by one and are
+   * stroked on screen, so lines keep their weight, and circles and arcs seen at a slant are ellipses. While a
+   * plane is picked, the square under the cursor is lit in the hover colour and named.
    */
   private renderScene(cam: Camera): void {
     const { app, g } = this;
@@ -106,7 +107,7 @@ export class Renderer {
     g.save();
     g.setLineDash([]);
     g.lineWidth = 1;
-    for (const frame of Object.values(PLANE_FRAMES)) {
+    for (const [plane, frame] of Object.entries(PLANE_FRAMES) as [Plane, typeof PLANE_FRAMES[Plane]][]) {
       g.beginPath();
       [[0, 0], [size, 0], [size, size], [0, size]].forEach(([x, y], i) => {
         const s = at(toWorld(frame, { x, y }));
@@ -120,6 +121,15 @@ export class Renderer {
       g.globalAlpha = 0.8;
       g.strokeStyle = COLORS.gridMajor;
       g.stroke();
+      if (app.pickHover === plane) {
+        g.globalAlpha = 1;
+        g.fillStyle = COLORS.hover;
+        g.fill();
+        g.lineWidth = 2;
+        g.strokeStyle = COLORS.hover;
+        g.stroke();
+        g.lineWidth = 1;
+      }
     }
     g.globalAlpha = 0.75;
     g.font = FONT;
@@ -149,8 +159,21 @@ export class Renderer {
       }
       if (app.settings.showProfile) this.drawProfiles(p, s);
       this.drawCurves(p, s, s !== active);
+      if (app.dimensionsInDesign.has(id)) this.drawDimensions(p, s, false);
     }
     drawOrigin(g, at(v3(0, 0, 0)), false);
+    if (app.pickHover) {
+      // The plane's name at the middle of its square, boxed as a dimension's value is.
+      const c = at(toWorld(PLANE_FRAMES[app.pickHover], { x: size / 2, y: size / 2 }));
+      const name = PLANE_NAMES[app.pickHover];
+      const { w, h } = labelSize(g, name);
+      g.fillStyle = COLORS.labelBg;
+      g.fillRect(c.x - w / 2, c.y - h / 2, w, h);
+      g.fillStyle = COLORS.dimension;
+      g.textAlign = 'center';
+      g.textBaseline = 'middle';
+      g.fillText(name, c.x, c.y + 0.5);
+    }
   }
 
   /** Where other sketches' planes meet this one, right across the view and under the geometry. */
@@ -384,7 +407,8 @@ export class Renderer {
     p.g.font = FONT;
     for (const d of Object.values(sketch.dimensions)) {
       if (interactive ? !app.annotationShown(sketch, d) : this.ownerHidden(sketch, d)) continue;
-      const layout = layoutDimension(app.design, sketch, d, app.view);
+      // Through the painter's view: in 3D that is the camera's, at its zoom.
+      const layout = layoutDimension(app.design, sketch, d, p.view);
       if (!layout) continue;
       drawDimension(p, layout, this.dimensionState(d, a.unsatisfied.has(d.id), interactive));
     }

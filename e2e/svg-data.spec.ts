@@ -117,10 +117,7 @@ async function finishSketch(u: SketchUser): Promise<void> {
 }
 
 async function newSketchOn(u: SketchUser, plane: 'XY' | 'YZ'): Promise<void> {
-  await u.page.getByRole('button', { name: 'Create Sketch' }).first().click();
-  await u.page.locator(`.plane[data-plane="${plane}"] polygon`).click();
-  await expect(u.page.locator('.tab.active')).toHaveText('SKETCH');
-  await u.settle();
+  await u.newSketch(plane);
 }
 
 /** Everything the task names, over three sketches, on four layers. Leaves design mode with the XY plane. */

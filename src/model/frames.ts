@@ -32,6 +32,9 @@ export const PLANE_FRAMES: Readonly<Record<Plane, Frame>> = {
   ZX: { o: v3(0, 0, 0), u: v3(0, 0, 1), v: v3(1, 0, 0) },
 };
 
+/** What the origin planes are called on screen, as the reference names them: ZX is XZ. */
+export const PLANE_NAMES: Readonly<Record<Plane, string>> = { XY: 'XY', YZ: 'YZ', ZX: 'XZ' };
+
 /** A fresh copy, for storing in a sketch. */
 export const planeFrame = (plane: Plane): Frame => structuredClone(PLANE_FRAMES[plane]) as Frame;
 
