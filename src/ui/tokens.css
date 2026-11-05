@@ -54,7 +54,7 @@
   --notice-edge: #e0a100;
   --notice-bg: #fff7dd;
 
-  /* Floating boxes: value fields, cursor tip, marking menu, plane picker, print preview */
+  /* Floating boxes: value fields, cursor tip, marking menu, print preview */
   --hud-bg: rgba(255, 255, 255, .92);
   --hud-edge: #9cc9e2;
   --tip-bg: rgba(255, 255, 255, .92);
@@ -62,11 +62,6 @@
   --on-pill: #fff;
   --marking-hub-edge: rgba(70, 80, 90, .55);
   --marking-hub-bg: rgba(255, 255, 255, .8);
-  --plane-backdrop: rgba(246, 247, 248, .72);
-  --plane-ink: #3a4047;
-  --plane-xy: #4c8fd6;
-  --plane-yz: #5fae6e;
-  --plane-zx: #d0715e;
   --preview-backdrop: #d9dcdf;
 
   /* Icons */
@@ -186,11 +181,6 @@
   --on-pill: #fff;
   --marking-hub-edge: rgba(190, 200, 210, .6);
   --marking-hub-bg: rgba(31, 35, 40, .85);
-  --plane-backdrop: rgba(22, 25, 29, .78);
-  --plane-ink: #e6e9ec;
-  --plane-xy: #5b9ee6;
-  --plane-yz: #6fc27f;
-  --plane-zx: #e0836f;
   --preview-backdrop: #14171a;
 
   --ic-blue: #4aa3ea;

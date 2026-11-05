@@ -5,8 +5,8 @@ import {
   pasteClipboard, toggleConstruction, type Clipboard,
 } from '../model/document';
 import {
-  add3, cross3, dot3, fold, foldArrows, isFrame, len3, meetingLines, norm3, normalOf, planeFrame, PLANE_FRAMES, rollAngle, sameFrame, samePlane,
-  scale3, sub3, tidyFrame, toPlane, toWorld, type Arrow,
+  add3, cross3, dot3, fold, foldArrows, isFrame, len3, meetingLines, norm3, normalOf, planeFrame, PLANE_FRAMES, PLANE_NAMES, rollAngle, sameFrame,
+  samePlane, scale3, sub3, tidyFrame, toPlane, toWorld, type Arrow,
 } from '../model/frames';
 import { isEmpty, seenFrom } from '../model/seen';
 import { AXIS_X, AXIS_Y, ORIGIN } from '../model/types';
@@ -48,11 +48,12 @@ import { Hud } from '../ui/hud';
 import { icon } from '../ui/icons';
 import { MarkingMenu, type RadialItem } from '../ui/marking-menu';
 import { Palette } from '../ui/palette';
-import { PlanePicker } from '../ui/plane-picker';
 import { StatusBar } from '../ui/status';
 import { Toolbar } from '../ui/toolbar';
 import { Toolbox } from '../ui/toolbox';
-import { between, facing, FrameView, HOME, orbitBy, panBy as panCamera, screenView, turn, zoomAt as zoomCamera, type Camera } from './camera';
+import {
+  between, facing, FrameView, HOME, orbitBy, panBy as panCamera, planeAt, project, screenView, turn, zoomAt as zoomCamera, type Camera,
+} from './camera';
 import { boxSelect, hitOf, hitTest, textShape, visiblePoints, type Hit, type HitEnv, type HitOptions, type TextShape } from './hit';
 import { isTextTarget, keyName, keyTable, type KeyBinding } from './keyboard';
 import { Selection } from './selection';
@@ -131,12 +132,19 @@ const ROLL_MS = 140;
 /** Into and out of the Orbit view, and onto a sketch picked in it. */
 const ORBIT_MS = 360;
 const ORBIT_PROMPT = 'Orbit: drag to turn the view, click a sketch to edit it, Esc to go back';
-/** Commands the Orbit view takes from the keyboard. Everything else waits until it closes. */
+/** Design mode is the Orbit view, with nothing to go back to. */
+const DESIGN_PROMPT = 'Create a sketch, or click one to edit it; drag to turn the view';
+const PICK_PROMPT = 'Select a plane for the sketch, or press Esc';
+/** Commands the Orbit view opened from a sketch takes from the keyboard. Everything else waits until it closes. */
 const ORBIT_KEYS = new Set(['orbit', 'escape', 'fit', 'undo', 'redo', 'save', 'open', 'new', 'print']);
 const ARROWS: Arrow[] = ['up', 'down', 'left', 'right'];
 /** How near a plane line (screen px) the cursor picks it: as near as a curve. */
 const PLANE_LINE_PX = 6;
 const easeInOut = (t: number): number => (t < 0.5 ? 4 * t * t * t : 1 - (-2 * t + 2) ** 3 / 2);
+
+/** Where a sketch is looked at in plan: the view's centre, in its coordinates, and zoom. */
+type PlanView = { cx: number; cy: number; ppm: number };
+const planOf = (v: PlanView): PlanView => ({ cx: v.cx, cy: v.cy, ppm: v.ppm });
 
 /** What to say when expressions took over the value of a name that went away. */
 const lostNote = (names: string[]): string => `${names.join(', ')} ${names.length === 1 ? 'is' : 'are'} gone: what used ${names.length === 1 ? 'it' : 'them'} keeps ${names.length === 1 ? 'its' : 'their'} last value as a number`;
@@ -148,10 +156,12 @@ export class App {
   activeId: Id | null = null;
   /** The plane the canvas looks straight at, in whose coordinates the view is: the active sketch's, in Sketch mode. */
   frame: Frame = planeFrame('XY');
-  /** What the canvas shows in 3D: during a swing, and in the Orbit view. Null when it shows `frame` in plan. */
+  /** What the canvas shows in 3D: during a swing, and in the Orbit view, design mode's included. Null when it shows `frame` in plan. */
   scene: Camera | null = null;
   /** The sketch under the cursor in the Orbit view, drawn lit. */
   orbitHover: Id | null = null;
+  /** The origin plane under the cursor while one is picked, drawn lit. */
+  pickHover: Plane | null = null;
   /** The plane line under the cursor in Sketch mode, drawn lit. */
   planeHover: { p: Vec2; d: Vec2; ids: Id[] } | null = null;
   readonly view = new View();
@@ -239,8 +249,24 @@ export class App {
   private press: { screen: Vec2; button: number } | null = null;
   private pan: Vec2 | null = null;
   private spaceHeld = false;
-  /** Open while the Orbit view is: where it was opened from, to go back to. */
-  private orbit: { back: { frame: Frame; cx: number; cy: number; ppm: number } } | null = null;
+  /**
+   * Open while the Orbit view is. `back`: the sketch it was opened from, to go back to. Null in design mode, which is
+   * the Orbit view with nowhere to go back to.
+   */
+  private orbit: { back: (PlanView & { frame: Frame }) | null } | null = null;
+  /**
+   * Create Sketch and Redefine Sketch Plane: an origin plane is picked in the Orbit view, and `chosen` takes it.
+   * `opened`: the pick opened the Orbit view from a sketch, so Esc goes back there.
+   */
+  private pick: { chosen: (plane: Plane, opened: boolean) => void; opened: boolean } | null = null;
+  /** Which way design mode looked when a sketch was opened from it, for Finish Sketch to swing back out to. */
+  private designTurn: { right: Vec3; up: Vec3 } = HOME;
+  /** Design mode's camera is its own fit, looking this way, so a resize fits it again. Null once it is turned, zoomed or panned. */
+  private homed: { right: Vec3; up: Vec3 } | null = null;
+  /** Where each sketch was last looked at in plan this session. */
+  private readonly views = new Map<Id, PlanView>();
+  /** The last of those, or the one a reload restored: a new sketch opens there. */
+  private planView: PlanView = { cx: 0, cy: 0, ppm: 4 };
   /** A drag or click in the Orbit view. */
   private orbitPress: { last: Vec2; travel: number } | null = null;
   /** How far the origin planes reach in the 3D view, in mm; set as each swing starts. */
@@ -264,7 +290,6 @@ export class App {
   readonly statusBar: StatusBar;
   readonly toolbox: Toolbox;
   readonly marking: MarkingMenu;
-  readonly planePicker: PlanePicker;
   /** System, Light or Dark. A browser preference: never part of the design or its history. */
   readonly theme = new ThemeController(() => this.themeChanged());
 
@@ -311,7 +336,6 @@ export class App {
     this.palette = new Palette(this);
     this.toolbox = new Toolbox(this);
     this.marking = new MarkingMenu(this);
-    this.planePicker = new PlanePicker(this);
     const left = document.createElement('div');
     left.className = 'left-column';
     left.append(this.browser.root, this.layersPanel.root);
@@ -412,6 +436,8 @@ export class App {
     this.view.resize(box.width, box.height, dpr);
     this.canvas.width = Math.round(box.width * dpr);
     this.canvas.height = Math.round(box.height * dpr);
+    // Design mode's own fit is fitted again; one the user has turned is left as it is.
+    if (this.homed && this.orbit && !this.orbit.back && !this.swing) this.homeNow(this.homed);
     this.invalidate();
   }
 
@@ -450,6 +476,11 @@ export class App {
       }
     }
     this.restoreUi();
+    // Design mode is the Orbit view, at Home round what is shown. A sketch left open reopens instead, in plan.
+    if (this.mode === 'design') {
+      this.showDesign(null);
+      this.status(DESIGN_PROMPT);
+    }
     if (lost) {
       this.message(lost, 'warn');
       this.rescueNote.show(lost, tail);
@@ -466,11 +497,12 @@ export class App {
   }
 
   private saveUi(): void {
-    // The Orbit view is not kept: a reload comes back to the plane it was opened from.
-    const { cx, cy, ppm } = this.orbit?.back ?? this.view;
+    // The Orbit view is not kept: a reload comes back to the plane it was opened from, or to design mode at Home.
+    // There the view kept is the last sketch's, for the next new one.
+    const { cx, cy, ppm } = this.orbit?.back ?? (this.mode === 'sketch' ? this.view : this.planView);
     try {
       localStorage.setItem(UI_KEY, JSON.stringify({
-        activeId: this.mode === 'sketch' ? this.activeId : null, frame: this.orbit?.back.frame ?? this.frame, cx, cy, ppm, settings: this.settings,
+        activeId: this.mode === 'sketch' ? this.activeId : null, frame: this.orbit?.back?.frame ?? this.frame, cx, cy, ppm, settings: this.settings,
       }));
     } catch {
       // Storage full or denied: the view is not worth a warning.
@@ -484,6 +516,7 @@ export class App {
       if (!ui) return;
       Object.assign(this.view, { cx: ui.cx, cy: ui.cy, ppm: ui.ppm });
       this.view.version++;
+      this.planView = planOf(this.view);
       this.settings = { ...this.settings, ...ui.settings };
       // An older version kept the plane's name.
       if (isFrame(ui.frame)) this.frame = tidyFrame(ui.frame);
@@ -505,10 +538,14 @@ export class App {
    * `clean`: the design is what a file holds, so there is nothing unsaved in it. `leave`: close the open sketch.
    */
   private replaceDesign(design: Design, opts: { clean?: boolean; leave?: boolean } = {}): string | null {
+    this.hurry();
     const was = { design: this.design, history: this.history, saved: this.saved, sketch: this.mode === 'sketch' ? this.activeId : null };
     let moved: string[] = [];
     try {
-      if (opts.leave) this.leaveSketch();
+      if (opts.leave) {
+        this.endPick();
+        this.leaveSketch();
+      }
       // What a file holds, to know it by after a reload, whatever opening it goes on to change.
       const print = fingerprint(design);
       this.design = design;
@@ -522,6 +559,9 @@ export class App {
       this.restored.clear();
       this.afterDocSwap();
       if (opts.clean !== false) this.rememberSaved(print);
+      // Another design: the views kept were of its sketches, and design mode goes Home round it.
+      this.views.clear();
+      if (this.mode === 'design' && this.orbit) this.homeNow(HOME);
     } catch (e) {
       this.design = was.design;
       this.history = was.history;
@@ -925,21 +965,38 @@ export class App {
     return this.activeId ? this.design.sketches[this.activeId] ?? null : null;
   }
 
-  /** Create Sketch: one undoable command, then Sketch mode. */
+  /**
+   * Create Sketch: an origin plane is picked in the Orbit view, from design mode or from a sketch, which stays
+   * open until one is. Esc goes back.
+   */
+  startSketch(): void {
+    this.pickPlane(PICK_PROMPT, (plane) => this.createSketch(plane));
+  }
+
+  /**
+   * Create Sketch on `plane`: one undoable command, then Sketch mode, the camera swinging round to face it. It opens
+   * at the view the last sketch was looked at in, as the plan of design mode used to give it.
+   */
   createSketch(plane: Plane): void {
     const s = newSketch(this.design, plane);
     this.history.commit(this.design, { label: 'Create Sketch' });
     this.autosave.schedule(this.design);
-    this.enterSketch(s.id);
+    this.enterSketch(s.id, this.orbit?.back ?? this.planView);
     this.emit('doc');
   }
 
-  /** Edit a sketch. From the Orbit view the camera swings round to face it first. */
-  enterSketch(id: Id): void {
+  /** Edit a sketch. From the Orbit view the camera swings round to face it first. `at`: the view to open it at. */
+  enterSketch(id: Id, at?: PlanView): void {
+    this.hurry();
     if (this.swing) return;
+    this.endPick();
     if (this.orbit && this.scene) {
-      this.faceSketch(id);
+      this.faceSketch(id, at);
       return;
+    }
+    if (at) {
+      Object.assign(this.view, planOf(at));
+      this.view.version++;
     }
     this.openSketch(id);
   }
@@ -968,26 +1025,41 @@ export class App {
     this.invalidate();
   }
 
+  /** Back to design mode, the camera swinging out to the Orbit view. */
   finishSketch(): void {
     if (this.mode !== 'sketch') return;
-    this.leaveSketch();
+    this.leaveSketch(true);
   }
 
-  private leaveSketch(): void {
+  /** To design mode: `swing` out to the Orbit view from the plan, else there at once. */
+  private leaveSketch(swing = false): void {
+    this.hurry();
+    const from = this.scene ?? facing(this.frame, this.view);
+    if (this.mode === 'sketch' && this.activeId) this.remember(this.activeId, this.orbit?.back ?? this.view);
     this.stopTool();
     this.mode = 'design';
     this.activeId = null;
     this.selection.clear();
     this.clearNote();
     this.lineType = 'normal';
-    this.status('Create a sketch, or right-click one in the browser to edit it');
+    this.planeHover = null;
+    this.showDesign(swing ? from : null);
+    if (!this.pick) this.status(DESIGN_PROMPT);
     this.emit('mode');
     this.emit('tool');
     this.emit('status');
     this.invalidate();
   }
 
+  /** A sketch's plan view as it is left, for coming back to it, and for the next new sketch to open at. */
+  private remember(id: Id, at: PlanView): void {
+    this.planView = planOf(at);
+    this.views.set(id, this.planView);
+  }
+
   deleteSketch(id: Id): void {
+    this.hurry();
+    this.views.delete(id);
     if (this.activeId === id) this.leaveSketch();
     const names = lastValues(this.design);
     deleteSketch(this.design, id);
@@ -996,6 +1068,32 @@ export class App {
     this.history.commit(this.design, { label: 'Delete Sketch' });
     this.afterDocSwap();
     if (lost.length) this.message(lostNote(lost), 'warn');
+  }
+
+  /**
+   * Redefine Sketch Plane: an origin plane is picked in the Orbit view, as for Create Sketch, and the sketch moves
+   * to it. From the sketch itself the camera then swings round to face it on its new plane.
+   */
+  redefineSketchPlane(id: Id): void {
+    const s = this.design.sketches[id];
+    if (!s) return;
+    this.pickPlane(`Select a plane for ${s.name}, or press Esc`, (plane, opened) => {
+      this.redefinePlane(id, plane);
+      const back = this.orbit?.back;
+      const moved = this.design.sketches[id];
+      if (back && moved && id === this.activeId) {
+        // Its own coordinates did not change, so it comes back to the view it was left in, on the new plane.
+        back.frame = structuredClone(moved.frame);
+        if (opened) {
+          this.faceSketch(id);
+          return;
+        }
+      } else if (back && opened) {
+        this.leaveOrbit();
+        return;
+      }
+      this.status(this.mode === 'design' ? DESIGN_PROMPT : ORBIT_PROMPT);
+    });
   }
 
   /** Move a sketch to another plane [ref GUID-3E407E01]. */
@@ -1096,6 +1194,7 @@ export class App {
     const n = normalOf(target.frame);
     const roll = level ? rollAngle(swung.right, target.frame.u, n) : 0;
     const end: Camera = level ? { right: { ...target.frame.u }, up: { ...target.frame.v }, centre: swung.centre, ppm: swung.ppm } : swung;
+    if (this.activeId) this.remember(this.activeId, this.view);
     this.openSketch(target.id);
     const centre = toPlane(target.frame, end.centre);
     this.view.cx = centre.x;
@@ -1209,11 +1308,11 @@ export class App {
 
   /**
    * Move the camera along `path` (0 to 1) over `ms`, drawing every visible sketch in 3D, then `land`. At
-   * once when the system asks for reduced motion.
+   * once when the system asks for reduced motion, or when a command hurries it.
    */
   private play(path: (t: number) => Camera, ms: number, land: () => void): void {
     this.planeChanged();
-    this.reach = Math.max(20, 0.6 * Math.max(...this.sceneCorners().map((p) => Math.hypot(p.x, p.y, p.z))));
+    this.reach = this.reachOf();
     this.hover = null;
     this.tip.style.display = 'none';
     const finish = (): void => {
@@ -1229,11 +1328,14 @@ export class App {
       finish();
       return;
     }
-    this.swing = { land };
+    const swing = { land: finish };
+    this.swing = swing;
     const start = performance.now();
     this.scene = path(0);
     this.invalidate();
     const tick = (now: number): void => {
+      // Hurried: it has landed already.
+      if (this.swing !== swing) return;
       const t = Math.min(1, (now - start) / ms);
       if (t >= 1) {
         finish();
@@ -1246,17 +1348,23 @@ export class App {
     requestAnimationFrame(tick);
   }
 
-  /** The Orbit view: every visible sketch in 3D, turned by dragging. Again to go back. */
+  /** A key, button or menu command does not wait for the camera: the swing lands at once, and the command goes on. */
+  private hurry(): void {
+    this.swing?.land();
+  }
+
+  /** The Orbit view from a sketch: every visible sketch in 3D, turned by dragging. Again to go back. Design mode is it already. */
   toggleOrbit(): void {
-    if (this.swing) return;
-    if (this.orbit) this.leaveOrbit();
-    else this.enterOrbit();
+    this.hurry();
+    if (this.orbit?.back) this.leaveOrbit();
+    else if (!this.orbit) this.enterOrbit();
   }
 
   private enterOrbit(): void {
-    if (this.planePicker.isOpen) this.planePicker.close();
     if (this.mode === 'sketch') this.setTool('select');
-    this.orbit = { back: { frame: structuredClone(this.frame), cx: this.view.cx, cy: this.view.cy, ppm: this.view.ppm } };
+    const back = { frame: structuredClone(this.frame), cx: this.view.cx, cy: this.view.cy, ppm: this.view.ppm };
+    if (this.mode === 'sketch' && this.activeId) this.remember(this.activeId, back);
+    this.orbit = { back };
     const from = facing(this.frame, this.view);
     const to = this.homeCamera();
     this.status(ORBIT_PROMPT);
@@ -1265,11 +1373,12 @@ export class App {
     });
   }
 
-  /** Back to the plane the Orbit view was opened from, facing it. */
+  /** Back to the sketch the Orbit view was opened from, facing it. */
   private leaveOrbit(): void {
     const orbit = this.orbit;
-    if (!orbit || this.swing) return;
-    const { back } = orbit;
+    const back = orbit?.back;
+    if (!orbit || !back || this.swing) return;
+    this.endPick();
     const from = this.scene ?? facing(back.frame, back);
     const to = facing(back.frame, back);
     this.play((t) => between(from, to, easeInOut(t)), ORBIT_MS, () => {
@@ -1280,35 +1389,90 @@ export class App {
       Object.assign(this.view, { cx: back.cx, cy: back.cy, ppm: back.ppm });
       this.view.version++;
       this.canvas.style.cursor = this.activeToolId === 'select' || !this.activeToolId ? 'default' : 'crosshair';
-      this.status(this.mode === 'design' ? 'Create a sketch, or right-click one in the browser to edit it' : '');
+      this.status(this.mode === 'design' ? DESIGN_PROMPT : '');
     });
   }
 
-  /** From the Orbit view, edit a sketch: the camera swings round to look straight at it. */
-  private faceSketch(id: Id): void {
+  /**
+   * From the Orbit view, edit a sketch: the camera swings round to look straight at it. At `at` when given, else
+   * as it was left: the view the Orbit view was opened from, or the last one it was looked at in. From design mode
+   * a sketch not looked at yet opens at the last sketch's view, as design mode's plan used to give it, if any of it
+   * shows there; otherwise, and from a sketch, it is fitted to it.
+   */
+  private faceSketch(id: Id, at?: PlanView): void {
     const s = this.design.sketches[id];
     const from = this.scene;
     const orbit = this.orbit;
     if (!s || !from || !orbit || this.swing) return;
-    let target = orbit.back;
-    if (!(id === this.activeId && this.mode === 'sketch' && sameFrame(orbit.back.frame, s.frame))) {
+    const back = orbit.back;
+    const fromDesign = this.mode === 'design';
+    if (fromDesign) this.designTurn = { right: { ...from.right }, up: { ...from.up } };
+    this.orbit = null;
+    this.orbitHover = null;
+    this.homed = null;
+    this.endPick();
+    this.canvas.style.cursor = 'default';
+    const kept = back && id === this.activeId && this.mode === 'sketch' && sameFrame(back.frame, s.frame) ? back : this.views.get(id);
+    // Open first, so the fit leaves room for the Sketch Palette that comes with Sketch mode.
+    this.openSketch(id);
+    const box = this.sketchBox(s);
+    let target = at ?? kept ?? (fromDesign && this.shows(this.planView, box) ? this.planView : undefined);
+    if (!target) {
       const look = new View();
       look.resize(this.view.width, this.view.height, this.view.dpr);
       look.ppm = from.ppm;
-      const box = this.sketchBox(s);
       if (Number.isFinite(box.minX)) look.fit(box, FIT_MARGIN, this.covered());
-      target = { frame: s.frame, cx: look.cx, cy: look.cy, ppm: look.ppm };
+      target = planOf(look);
     }
     const to = facing(s.frame, target);
-    this.orbit = null;
-    this.orbitHover = null;
-    this.canvas.style.cursor = 'default';
-    this.openSketch(id);
-    Object.assign(this.view, { cx: target.cx, cy: target.cy, ppm: target.ppm });
+    Object.assign(this.view, planOf(target));
     this.view.version++;
     this.play((t) => between(from, to, easeInOut(t)), ORBIT_MS, () => {
       this.scene = null;
     });
+  }
+
+  /** Whether any of `box` is on the canvas at `at`. An empty box shows anywhere. */
+  private shows(at: PlanView, box: Box): boolean {
+    if (!Number.isFinite(box.minX)) return true;
+    const w = this.view.width / 2 / at.ppm;
+    const h = this.view.height / 2 / at.ppm;
+    return box.maxX >= at.cx - w && box.minX <= at.cx + w && box.maxY >= at.cy - h && box.minY <= at.cy + h;
+  }
+
+  /**
+   * Design mode is the Orbit view, round everything shown: swung out to it from `from`, looking the way it looked
+   * when a sketch was opened from it, or there at once. From the Orbit view of a sketch it stays as it is.
+   */
+  private showDesign(from: Camera | null): void {
+    // Nothing to go back to now.
+    if (this.pick) this.pick.opened = false;
+    if (this.orbit && this.scene) {
+      this.orbit.back = null;
+      return;
+    }
+    this.orbit = { back: null };
+    if (!from) {
+      this.homeNow(this.designTurn);
+      return;
+    }
+    const turnTo = this.designTurn;
+    const to = this.homeCamera(turnTo);
+    this.play((t) => between(from, to, easeInOut(t)), ORBIT_MS, () => {
+      this.view.ppm = to.ppm;
+      this.homed = turnTo;
+    });
+  }
+
+  /** Straight to the fit round everything shown, looking along `turnTo`. */
+  private homeNow(turnTo: { right: Vec3; up: Vec3 }): void {
+    const to = this.homeCamera(turnTo);
+    this.scene = to;
+    // Curves are flattened for the zoom they are seen at.
+    this.view.ppm = to.ppm;
+    this.homed = turnTo;
+    this.planeChanged();
+    this.invalidate();
   }
 
   /** The corners of every shown sketch's extent in 3D, and the origin. */
@@ -1324,9 +1488,16 @@ export class App {
     return pts;
   }
 
-  /** Isometric, round everything shown, with the origin in it. */
-  private homeCamera(): Camera {
-    const pts = this.sceneCorners();
+  /** How far the origin planes reach: about half way to the furthest geometry, and 20 mm with none. */
+  private reachOf(): number {
+    return Math.max(20, 0.6 * Math.max(...this.sceneCorners().map((p) => Math.hypot(p.x, p.y, p.z))));
+  }
+
+  /** Round everything shown and the origin planes, looking along `turnTo`: isometric Home unless told otherwise. */
+  private homeCamera(turnTo: { right: Vec3; up: Vec3 } = HOME): Camera {
+    this.reach = this.reachOf();
+    const r = this.reach;
+    const pts = [...this.sceneCorners(), { x: r, y: 0, z: 0 }, { x: 0, y: r, z: 0 }, { x: 0, y: 0, z: r }, { x: r, y: r, z: 0 }, { x: 0, y: r, z: r }, { x: r, y: 0, z: r }];
     const lo = { x: Math.min(...pts.map((p) => p.x)), y: Math.min(...pts.map((p) => p.y)), z: Math.min(...pts.map((p) => p.z)) };
     const hi = { x: Math.max(...pts.map((p) => p.x)), y: Math.max(...pts.map((p) => p.y)), z: Math.max(...pts.map((p) => p.z)) };
     const centre = scale3(add3(lo, hi), 0.5);
@@ -1334,8 +1505,8 @@ export class App {
     let ey = 0;
     for (const p of pts) {
       const d = sub3(p, centre);
-      ex = Math.max(ex, Math.abs(dot3(d, HOME.right)));
-      ey = Math.max(ey, Math.abs(dot3(d, HOME.up)));
+      ex = Math.max(ex, Math.abs(dot3(d, turnTo.right)));
+      ey = Math.max(ey, Math.abs(dot3(d, turnTo.up)));
     }
     const cover = this.covered();
     const room = { w: this.view.width - cover.left - cover.right - FIT_MARGIN * 4, h: this.view.height - FIT_MARGIN * 4 };
@@ -1343,7 +1514,92 @@ export class App {
     const fitted = Math.min(1e5, Math.max(1e-3, ppm));
     // The panels cover the left: the middle of what is left moves right by half of it.
     const shift = (cover.left - cover.right) / 2 / fitted;
-    return { right: { ...HOME.right }, up: { ...HOME.up }, centre: sub3(centre, scale3(HOME.right, shift)), ppm: fitted };
+    return { right: { ...turnTo.right }, up: { ...turnTo.up }, centre: sub3(centre, scale3(turnTo.right, shift)), ppm: fitted };
+  }
+
+  // Picking a plane: Create Sketch and Redefine Sketch Plane
+
+  get picking(): boolean {
+    return this.pick !== null;
+  }
+
+  /**
+   * Pick an origin plane in the Orbit view, for `chosen`: from design mode, or from a sketch, which opens the Orbit
+   * view. The squares light under the cursor; sketch geometry is not picked meanwhile. Esc goes back.
+   */
+  private pickPlane(prompt: string, chosen: (plane: Plane, opened: boolean) => void): void {
+    this.hurry();
+    if (this.swing) return;
+    const opened = !this.orbit || this.pick?.opened === true;
+    if (!this.orbit) this.enterOrbit();
+    this.pick = { chosen, opened };
+    this.orbitHover = null;
+    this.status(prompt);
+    this.emit('mode');
+    this.invalidate();
+  }
+
+  /** The pick is over: nothing lights, and the tip goes. */
+  private endPick(): void {
+    if (!this.pick) return;
+    this.pick = null;
+    this.pickHover = null;
+    this.tip.style.display = 'none';
+    this.emit('mode');
+    this.invalidate();
+  }
+
+  /** Esc: back to where the pick started. */
+  private cancelPick(): void {
+    const pick = this.pick;
+    if (!pick) return;
+    this.endPick();
+    if (pick.opened) this.leaveOrbit();
+    else this.status(this.mode === 'design' ? DESIGN_PROMPT : ORBIT_PROMPT);
+  }
+
+  /** A click while picking: the plane under it, if any, is the one. */
+  private pickAt(screen: Vec2): void {
+    const pick = this.pick;
+    const plane = this.planeUnder(screen);
+    if (!pick || !plane) return;
+    this.endPick();
+    pick.chosen(plane, pick.opened);
+  }
+
+  /** The origin plane square under a canvas position in the 3D view, nearest the camera. */
+  private planeUnder(screen: Vec2): Plane | null {
+    return this.scene ? planeAt(this.scene, screen, this.view.width, this.view.height, this.reach) : null;
+  }
+
+  /** While picking, the square under the cursor lights and the tip by the cursor names it. */
+  private hoverPick(screen: Vec2): void {
+    const plane = this.planeUnder(screen);
+    this.canvas.style.cursor = plane ? 'pointer' : 'grab';
+    if (plane !== this.pickHover) {
+      this.pickHover = plane;
+      this.invalidate();
+    }
+    if (!plane) {
+      this.tip.style.display = 'none';
+      return;
+    }
+    const name = `${PLANE_NAMES[plane]} plane`;
+    if (this.tip.dataset.key !== `pick|${name}`) {
+      this.tip.dataset.key = `pick|${name}`;
+      this.tip.innerHTML = `<span class="tip-icon">${icon('create-sketch')}</span>`;
+      this.tip.append(name);
+    }
+    this.tip.style.display = 'flex';
+    this.tip.style.transform = `translate(${Math.round(screen.x + 14)}px, ${Math.round(screen.y + 34)}px)`;
+  }
+
+  /** A point of an origin plane, in its coordinates, on the page through the 3D view, for tests. */
+  private planeToClient(plane: Plane, p: Vec2): Vec2 | null {
+    if (!this.scene || !PLANE_FRAMES[plane]) return null;
+    const q = project(this.scene, toWorld(PLANE_FRAMES[plane], p), this.view.width, this.view.height);
+    const box = this.canvas.getBoundingClientRect();
+    return { x: q.x + box.left, y: q.y + box.top };
   }
 
   /** How far the faint origin planes reach in the 3D view, in mm: about half way to the furthest geometry. */
@@ -1435,8 +1691,8 @@ export class App {
 
   /** Start a tool from the UI, keyboard or marking menu. */
   activate(id: string, arg?: unknown): void {
-    if (this.swing) return;
-    if (this.orbit) {
+    this.hurry();
+    if (this.orbit?.back) {
       this.message('Close the Orbit view first: press Esc or V', 'warn');
       return;
     }
@@ -2128,7 +2384,7 @@ export class App {
   }
 
   run(id: string): void {
-    if (this.swing) return;
+    this.hurry();
     if (id.startsWith('tool:')) {
       this.activate(id.slice(5));
       return;
@@ -2153,11 +2409,8 @@ export class App {
     this.command('fit', 'Look At', () => this.fit());
     this.command('toolbox', 'Toolbox', () => this.toolbox.open());
     this.command('finish-sketch', 'Finish Sketch', () => this.finishSketch(), needSketch);
-    this.command('create-sketch', 'Create Sketch', () => {
-      // From the SOLID tab mid-sketch: a 3D step finishes the sketch first [ref SKT-3D-SKETCH].
-      this.finishSketch();
-      this.planePicker.open();
-    });
+    // From the SOLID tab mid-sketch too: the sketch stays open until a plane is picked, and Esc goes back to it.
+    this.command('create-sketch', 'Create Sketch', () => this.startSketch());
     this.command('compute', 'Compute Sketch', () => this.computeSketch(), needSketch);
     this.command('repeat', 'Repeat', () => { if (this.lastTool) this.activate(this.lastTool); });
     this.command('new', 'New', () => this.newFile());
@@ -2171,7 +2424,7 @@ export class App {
     this.command('escape', 'Escape', () => this.escape());
     this.command('hud-next', 'Next Field', () => this.hud.tab(false));
     this.command('hud-prev', 'Previous Field', () => this.hud.tab(true));
-    this.command('orbit', 'Orbit View', () => this.toggleOrbit());
+    this.command('orbit', 'Orbit View', () => this.toggleOrbit(), () => (this.mode === 'design' ? 'design mode is the Orbit view already' : null));
     for (const arrow of ARROWS) {
       const label = `Fold ${arrow[0].toUpperCase()}${arrow.slice(1)}`;
       this.command(`fold-${arrow}`, label, () => this.foldPlane(arrow), () => {
@@ -2181,12 +2434,17 @@ export class App {
     }
   }
 
-  /** What the File menu exports: the open sketch, or everything shown in design mode. */
+  /**
+   * What the File menu exports: the open sketch, or in design mode the shown sketches on one plane, that of the
+   * sketch last edited, else of the last one shown.
+   */
   private fileSketches(): Sketch[] {
     const s = this.activeSketch;
     if (s) return [s];
-    // In their own coordinates, so only those that share the frame looked at: the others would not line up.
-    return this.design.order.map((id) => this.design.sketches[id]).filter((k) => k && k.visible && sameFrame(k.frame, this.frame));
+    // In their own coordinates, so only those that share a frame: the others would not line up.
+    const shown = this.design.order.map((id) => this.design.sketches[id]).filter((k) => k && k.visible);
+    const frame = shown.some((k) => sameFrame(k.frame, this.frame)) ? this.frame : shown.at(-1)?.frame;
+    return frame ? shown.filter((k) => sameFrame(k.frame, frame)) : [];
   }
 
   private openPrint(): void {
@@ -2266,17 +2524,18 @@ export class App {
   }
 
   fit(): void {
-    if (this.swing) return;
+    this.hurry();
     if (this.orbit && this.scene) {
       const from = this.scene;
       const to = this.homeCamera();
       this.play((t) => between(from, to, easeInOut(t)), ORBIT_MS, () => {
         this.view.ppm = to.ppm;
+        if (this.orbit && !this.orbit.back) this.homed = HOME;
       });
       return;
     }
-    // A box is in its sketch's coordinates: in design mode, the last sketch the view's plane is drawn in.
-    const s = this.activeSketch ?? [...this.design.order].reverse().map((id) => this.design.sketches[id]).find((k) => k && sameFrame(k.frame, this.frame));
+    // Only Sketch mode is in plan: design mode is the Orbit view.
+    const s = this.activeSketch;
     const box = s ? this.sketchBox(s) : null;
     // A dimension is read at its label, which can sit well outside what it measures.
     if (box && s) for (const d of Object.values(s.dimensions)) if (!d.feature) boxAdd(box, d.label);
@@ -2336,16 +2595,16 @@ export class App {
   }
 
   escape(): void {
-    if (this.orbit) {
+    if (this.pick) {
+      this.cancelPick();
+      return;
+    }
+    if (this.orbit?.back) {
       this.leaveOrbit();
       return;
     }
     if (this.marking.isOpen) {
       this.marking.close();
-      return;
-    }
-    if (this.planePicker.isOpen) {
-      this.planePicker.close();
       return;
     }
     if (this.hud.editing) {
@@ -2364,16 +2623,6 @@ export class App {
 
   // -------------------------------------------------------------------------
   // Input
-
-  /** The visible sketch with geometry under a window position, for Create Sketch [ref GUID-0EEF7073]. */
-  sketchAt(clientX: number, clientY: number): Id | null {
-    const box = this.canvas.getBoundingClientRect();
-    const screen = { x: clientX - box.left, y: clientY - box.top };
-    for (const s of this.otherSketches().reverse()) {
-      if (hitTest(this.hitEnv(s), screen, { kinds: ['point', 'curve'] })) return s.id;
-    }
-    return null;
-  }
 
   private placeTip(screen: Vec2): void {
     const meta = this.toolDef?.meta;
@@ -2430,6 +2679,8 @@ export class App {
     // Focus is managed on pointerdown; the default would pull it out of a HUD field mid-expression.
     c.addEventListener('mousedown', (e) => e.preventDefault());
     c.addEventListener('pointerdown', (e) => {
+      // The marking menu does not depend on where the camera is: a right-click lands the swing at once.
+      if (e.button === 2) this.hurry();
       if (this.swing) return;
       c.setPointerCapture(e.pointerId);
       if (e.button === 1 || (e.button === 0 && this.spaceHeld)) {
@@ -2439,6 +2690,11 @@ export class App {
       }
       if (this.orbit) {
         if (e.button === 0) this.orbitPress = { last: { x: e.clientX, y: e.clientY }, travel: 0 };
+        // Design mode keeps its marking menu; not while a plane is picked.
+        if (e.button === 2 && !this.orbit.back && !this.pick) {
+          const box = c.getBoundingClientRect();
+          this.openMarkingMenu({ x: e.clientX - box.left, y: e.clientY - box.top });
+        }
         return;
       }
       if (e.button === 2) {
@@ -2448,11 +2704,6 @@ export class App {
         return;
       }
       if (e.button !== 0) return;
-      if (this.planePicker.isOpen) {
-        const id = this.sketchAt(e.clientX, e.clientY);
-        if (id) this.planePicker.choose(id);
-        return;
-      }
       if (this.interceptForHud(e)) return;
       this.clearNote();
       if (this.mode === 'sketch' && this.lockedActive) this.message(this.lockedNote(), 'warn');
@@ -2466,8 +2717,10 @@ export class App {
     c.addEventListener('pointermove', (e) => {
       if (this.swing) return;
       if (this.pan) {
-        if (this.orbit && this.scene) this.scene = panCamera(this.scene, e.clientX - this.pan.x, e.clientY - this.pan.y);
-        else this.view.panBy(e.clientX - this.pan.x, e.clientY - this.pan.y);
+        if (this.orbit && this.scene) {
+          this.scene = panCamera(this.scene, e.clientX - this.pan.x, e.clientY - this.pan.y);
+          this.homed = null;
+        } else this.view.panBy(e.clientX - this.pan.x, e.clientY - this.pan.y);
         this.pan = { x: e.clientX, y: e.clientY };
         this.invalidate();
         return;
@@ -2502,12 +2755,21 @@ export class App {
         return;
       }
       if (this.orbit) {
+        const box = c.getBoundingClientRect();
+        const screen = { x: e.clientX - box.left, y: e.clientY - box.top };
+        if (e.button === 2) {
+          if (this.marking.isOpen) this.marking.flick(screen);
+          return;
+        }
         const press = this.orbitPress;
         this.orbitPress = null;
         if (press && press.travel < CLICK_TRAVEL && !this.swing) {
-          const box = c.getBoundingClientRect();
-          const id = this.sketchUnder({ x: e.clientX - box.left, y: e.clientY - box.top });
-          if (id) this.faceSketch(id);
+          // While a plane is picked only the planes take a click.
+          if (this.pick) this.pickAt(screen);
+          else {
+            const id = this.sketchUnder(screen);
+            if (id) this.faceSketch(id);
+          }
         }
         return;
       }
@@ -2537,6 +2799,10 @@ export class App {
     });
     c.addEventListener('pointerleave', () => {
       this.tip.style.display = 'none';
+      if (this.pickHover) {
+        this.pickHover = null;
+        this.invalidate();
+      }
       if (this.press) return;
       this.inference = null;
       this.hover = null;
@@ -2556,6 +2822,7 @@ export class App {
         this.scene = a.kind === 'zoom' ? zoomCamera(this.scene, a.at, a.factor, width, height) : panCamera(this.scene, a.dx, a.dy);
         // Curves are flattened for the zoom they are seen at.
         this.view.ppm = this.scene.ppm;
+        this.homed = null;
       } else if (a.kind === 'zoom') this.view.zoomAt(a.at, a.factor);
       else this.view.panBy(a.dx, a.dy);
       this.invalidate();
@@ -2586,7 +2853,7 @@ export class App {
     this.tip.style.transform = `translate(${Math.round(screen.x + 14)}px, ${Math.round(screen.y + 34)}px)`;
   }
 
-  /** A drag in the Orbit view turns it; plain travel lights the sketch under the cursor. */
+  /** A drag in the Orbit view turns it; plain travel lights the sketch, or while picking the plane, under the cursor. */
   private orbitMove(e: PointerEvent): void {
     const press = this.orbitPress;
     if (press && this.scene) {
@@ -2597,11 +2864,18 @@ export class App {
       if (press.travel >= CLICK_TRAVEL) {
         this.scene = orbitBy(this.scene, dx, dy);
         this.orbitHover = null;
+        this.pickHover = null;
+        this.homed = null;
+        this.tip.style.display = 'none';
         this.invalidate();
       }
       return;
     }
     const box = this.canvas.getBoundingClientRect();
+    if (this.pick) {
+      this.hoverPick({ x: e.clientX - box.left, y: e.clientY - box.top });
+      return;
+    }
     const id = this.sketchUnder({ x: e.clientX - box.left, y: e.clientY - box.top });
     this.canvas.style.cursor = id ? 'pointer' : 'grab';
     if (id !== this.orbitHover) {
@@ -2744,8 +3018,13 @@ export class App {
   private bindKeys(): void {
     window.addEventListener('keydown', (e) => {
       if (this.swing) {
-        if (!isTextTarget(e.target)) e.preventDefault();
-        return;
+        // A command lands the swing at once and goes on; anything else waits for it.
+        const bound = this.keys.some((b) => b.key === keyName(e));
+        if (!bound || isTextTarget(e.target)) {
+          if (!isTextTarget(e.target)) e.preventDefault();
+          return;
+        }
+        this.hurry();
       }
       if (e.key === ' ' && !isTextTarget(e.target)) {
         this.spaceHeld = true;
@@ -2762,10 +3041,10 @@ export class App {
       if (name === 'enter' && e.target instanceof HTMLTextAreaElement) return;
       if (!inText && this.routeToHud(e)) return;
       if (binding?.command.startsWith('hud-') && !this.hud.active) return;
-      // In a dialog or a menu the arrows are its own; in the Orbit view most keys wait for it to close.
+      // In a dialog or a menu the arrows are its own; in the Orbit view of a sketch most keys wait for it to close.
       const inDialog = e.target instanceof Element && !!e.target.closest('[role="dialog"], .popup-menu');
-      if (binding?.command.startsWith('fold-') && (inDialog || this.dialogs.current || this.marking.isOpen || this.planePicker.isOpen)) return;
-      if (this.orbit && !(binding && ORBIT_KEYS.has(binding.command))) return;
+      if (binding?.command.startsWith('fold-') && (inDialog || this.dialogs.current || this.marking.isOpen || this.pick)) return;
+      if (this.orbit?.back && !(binding && ORBIT_KEYS.has(binding.command))) return;
       if (binding) {
         e.preventDefault();
         this.run(binding.command);
@@ -2858,6 +3137,10 @@ export class App {
       get scene() { return app.scene ? clone(app.scene) : null; },
       get swinging() { return app.swinging; },
       get orbiting() { return app.orbiting; },
+      get picking() { return app.picking; },
+      get pickHover() { return app.pickHover; },
+      get planeSize() { return app.sceneSize(); },
+      planeToScreen: (plane, x, y) => app.planeToClient(plane, { x, y }),
       seen: () => app.otherSketches().map((s) => ({
         id: s.id,
         curves: Object.values(s.curves).filter((c) => app.curveVisible(c)).map((c) => c.id),
@@ -2915,7 +3198,16 @@ export interface SketchDebug {
   readonly scene: Camera | null;
   /** The camera is swinging between planes or views. */
   readonly swinging: boolean;
+  /** The Orbit view is open: always in design mode, and from a sketch with V. */
   readonly orbiting: boolean;
+  /** An origin plane is being picked, for Create Sketch or Redefine Sketch Plane. */
+  readonly picking: boolean;
+  /** The plane square lit under the cursor while picking. */
+  readonly pickHover: Plane | null;
+  /** How far the origin plane squares reach in the 3D view, in mm. */
+  readonly planeSize: number;
+  /** Where a point of an origin plane, in its coordinates, shows on the page in the 3D view, or null outside it. */
+  planeToScreen(plane: Plane, x: number, y: number): Vec2 | null;
   /** What each other visible sketch shows of itself here: the curves and the points drawn and pickable. */
   seen(): { id: Id; curves: Id[]; points: Id[] }[];
   /** Where a sketch point shows on the page in the 3D view, or null outside it. */

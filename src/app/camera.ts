@@ -1,7 +1,7 @@
 // The 3D view: an orthographic camera, for the swing between planes and the Orbit view. Screen coordinates
 // are CSS pixels, Y down, as in view.ts; a sketch in Sketch mode is this camera looking straight at its frame.
-import type { Frame, Vec2, Vec3 } from '../model/types';
-import { add3, cross3, dot3, norm3, rotate3, scale3, sub3, toWorld, v3 } from '../model/frames';
+import type { Frame, Plane, Vec2, Vec3 } from '../model/types';
+import { add3, cross3, dot3, norm3, normalOf, PLANE_FRAMES, rotate3, scale3, sub3, toPlane, toWorld, v3 } from '../model/frames';
 import { View } from './view';
 
 export interface Camera {
@@ -35,6 +35,31 @@ export function project(cam: Camera, p: Vec3, width: number, height: number): Ve
 /** The 3D point on the camera's own plane through its centre that shows at `s`. */
 export function unproject(cam: Camera, s: Vec2, width: number, height: number): Vec3 {
   return add3(cam.centre, add3(scale3(cam.right, (s.x - width / 2) / cam.ppm), scale3(cam.up, -(s.y - height / 2) / cam.ppm)));
+}
+
+/** A plane this near edge-on to the camera shows as a line, and is not picked. */
+const EDGE_ON = 1e-9;
+
+/**
+ * The origin plane square under `s`, `size` mm from the origin along its u and v as the 3D view draws it, nearest
+ * the camera where squares overlap: a ray through `s` along the view, against each square in turn. Null off them all.
+ */
+export function planeAt(cam: Camera, s: Vec2, width: number, height: number, size: number): Plane | null {
+  const from = unproject(cam, s, width, height);
+  // Toward the camera, so the larger the distance along it, the nearer.
+  const back = toward(cam);
+  let best: { plane: Plane; t: number } | null = null;
+  for (const plane of Object.keys(PLANE_FRAMES) as Plane[]) {
+    const f = PLANE_FRAMES[plane];
+    const n = normalOf(f);
+    const across = dot3(back, n);
+    if (Math.abs(across) < EDGE_ON) continue;
+    const t = dot3(sub3(f.o, from), n) / across;
+    const q = toPlane(f, add3(from, scale3(back, t)));
+    if (q.x < 0 || q.y < 0 || q.x > size || q.y > size) continue;
+    if (!best || t > best.t) best = { plane, t };
+  }
+  return best?.plane ?? null;
 }
 
 /** Turn the whole camera about a line through `pivot`, as rigidly as if it were fixed to it. */

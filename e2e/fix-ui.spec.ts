@@ -862,7 +862,7 @@ test.describe('W-P2-6 Create Sketch on what is already there', () => {
     await u.page.getByRole('button', { name: 'Finish Sketch' }).first().click();
     await u.settle();
     await u.page.locator('.tool-btn[aria-label="Create Sketch"]').click();
-    await u.settle();
+    await u.landed();
     return id;
   };
 
@@ -870,26 +870,37 @@ test.describe('W-P2-6 Create Sketch on what is already there', () => {
     const u = await start(page);
     const id = await oneSketch(u);
     await page.locator(`.sketch-row[data-sketch="${id}"] .tree-label`).click();
-    await u.settle();
-    await expect(page.locator('.plane-picker')).toHaveCount(0);
+    await u.landed();
+    expect(await page.evaluate(() => window.__sketch.picking)).toBe(false);
     expect(await page.evaluate(() => window.__sketch.activeId)).toBe(id);
     expect((await u.design()).order).toHaveLength(1);
   });
 
-  test('sketch geometry edits that sketch, an empty spot on a plane still makes one', async ({ page }) => {
+  test('sketch geometry edits that sketch before Create Sketch, and only a plane takes the click once it is pressed', async ({ page }) => {
     const u = await start(page);
     const id = await oneSketch(u);
-    // On the rim, under the picker.
-    const p = await u.screen({ x: 30, y: 0 });
-    await page.mouse.click(p.x, p.y);
+    // While a plane is picked only the planes take a click: on the rim, inside the XY square, it makes a sketch on XY.
+    const r = 30 * Math.SQRT1_2;
+    const rim = await page.evaluate(([k, x]) => window.__sketch.sceneToScreen(k as string, x as number, x as number), [id, r] as const) as Xy;
+    await page.mouse.move(rim.x, rim.y);
     await u.settle();
-    expect(await page.evaluate(() => window.__sketch.activeId)).toBe(id);
-    expect((await u.design()).order).toHaveLength(1);
+    expect(await page.evaluate(() => window.__sketch.pickHover)).toBe('XY');
+    await page.mouse.down();
+    await page.mouse.up();
+    await u.landed();
+    const d = await u.design();
+    expect(d.order).toHaveLength(2);
+    expect(await page.evaluate(() => window.__sketch.activeId)).toBe(d.order[1]);
+    expect(d.sketches[d.order[1]].frame).toEqual(PLANE_FRAMES.XY);
+    // Out in design mode again, the rim is the first sketch's, and a click there edits it [ref GUID-0EEF7073].
     await page.getByRole('button', { name: 'Finish Sketch' }).first().click();
-    await u.settle();
-    await page.locator('.tool-btn[aria-label="Create Sketch"]').click();
-    await page.locator('.plane[data-plane="YZ"] polygon').click();
-    await u.settle();
+    await u.landed();
+    const again = await page.evaluate(([k, x]) => window.__sketch.sceneToScreen(k as string, x as number, x as number), [id, r] as const) as Xy;
+    await page.mouse.move(again.x, again.y);
+    await page.mouse.down();
+    await page.mouse.up();
+    await u.landed();
+    expect(await page.evaluate(() => window.__sketch.activeId)).toBe(id);
     expect((await u.design()).order).toHaveLength(2);
   });
 });
@@ -1147,7 +1158,7 @@ test.describe('create polish', () => {
 });
 
 test.describe('sketch shell', () => {
-  test('W-P3-2 SOLID is reachable while sketching, with the Create tools; Create Sketch there finishes this one', async ({ page }) => {
+  test('W-P3-2 SOLID is reachable while sketching, with the Create tools; Create Sketch there picks a plane for the next one', async ({ page }) => {
     const u = await start(page);
     await page.locator('.tab', { hasText: 'SOLID' }).click();
     await expect(page.locator('.tab.active')).toHaveText('SOLID');
@@ -1156,18 +1167,30 @@ test.describe('sketch shell', () => {
     await u.settle();
     expect(await tool(page)).toBe('line');
     await u.press('Escape');
+    const first = await page.evaluate(() => window.__sketch.activeId);
     await page.locator('.tool-btn[aria-label="Create Sketch"]').click();
-    await u.settle();
-    expect(await page.evaluate(() => window.__sketch.mode)).toBe('design');
-    await expect(page.locator('.plane-picker')).toHaveCount(1);
+    await u.landed();
+    // The sketch stays open until a plane is picked, in the Orbit view.
+    expect(await page.evaluate(() => window.__sketch.mode)).toBe('sketch');
+    expect(await page.evaluate(() => window.__sketch.picking)).toBe(true);
+    await u.pickPlane('YZ');
+    const d = await u.design();
+    expect(d.order).toHaveLength(2);
+    expect(await page.evaluate(() => window.__sketch.activeId)).not.toBe(first);
+    expect(d.sketches[d.order[1]].frame).toEqual(PLANE_FRAMES.YZ);
   });
 
-  test('W-P3-3 the picker names the planes as the reference does', async ({ page }) => {
+  test('W-P3-3 the planes are named as the reference names them', async ({ page }) => {
     const u = new SketchUser(page);
     await u.open();
     await page.getByRole('button', { name: 'Create Sketch' }).first().click();
-    await expect(page.locator('.plane[data-plane="XY"] text')).toHaveText('XY (Top)');
-    await expect(page.locator('.plane[data-plane="ZX"] text')).toHaveText('XZ');
+    const size = await page.evaluate(() => window.__sketch.planeSize);
+    for (const [plane, name] of [['XY', 'XY plane'], ['ZX', 'XZ plane'], ['YZ', 'YZ plane']] as const) {
+      const at = await u.planeScreen(plane, size * 0.8, size * 0.8);
+      await page.mouse.move(at.x, at.y, { steps: 2 });
+      await u.settle();
+      await expect(page.locator('.cursor-tip')).toHaveText(name);
+    }
     await page.keyboard.press('Escape');
     await u.settle();
     expect(await page.evaluate(() => window.__sketch.status)).not.toContain('Select a plane');
@@ -1350,8 +1373,7 @@ test.describe('sketch shell', () => {
     const id = (await u.design()).order[0];
     await page.locator(`.sketch-row[data-sketch="${id}"]`).click({ button: 'right' });
     await page.locator('.popup-menu .menu-item[data-item="Redefine Sketch Plane"]').click();
-    await page.locator('.plane[data-plane="YZ"] polygon').click();
-    await u.settle();
+    await u.pickPlane('YZ');
     expect((await u.design()).sketches[id].frame).toEqual(PLANE_FRAMES.YZ);
     expect((await u.design()).order).toHaveLength(1);
     await u.press('Meta+z');

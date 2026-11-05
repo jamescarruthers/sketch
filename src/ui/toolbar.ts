@@ -107,7 +107,7 @@ export class Toolbar {
     }
     this.ribbon.replaceChildren();
     if (this.onSolid) {
-      // The tutorials reach the sketch tools through Solid > Create [ref GUID-E8BB984B]; Create Sketch finishes this one.
+      // The tutorials reach the sketch tools through Solid > Create [ref GUID-E8BB984B]; Create Sketch picks a plane for the next.
       this.ribbon.append(this.designPanel('SKETCH'), this.panel(MENU[0]));
     } else if (inSketch) {
       MENU.forEach((p) => this.ribbon.append(this.panel(p)));

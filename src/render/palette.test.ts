@@ -67,8 +67,7 @@ describe('tokens', () => {
   it('is read by the DOM through var(), never copied as a literal into styles.css', () => {
     const css = readFileSync('src/ui/styles.css', 'utf8');
     expect(css.match(/#[0-9a-f]{3,8}\b|rgba?\(/gi) ?? []).toEqual(['#000', '#fff']);
-    // --plane is set per plane by the picker itself, from --plane-xy and the others.
-    for (const name of css.matchAll(/var\((--[\w-]+)\)/g)) if (name[1] !== '--plane') expect(Object.keys(TOKENS.light), name[1]).toContain(name[1]);
+    for (const name of css.matchAll(/var\((--[\w-]+)\)/g)) expect(Object.keys(TOKENS.light), name[1]).toContain(name[1]);
   });
 
   it('names a token from its key', () => {
@@ -126,7 +125,7 @@ function opaque(theme: Theme, name: string, backdrop: Rgb): Rgb {
 
 const surface = (theme: Theme, name: string): Rgb => {
   // Panels and boxes that are translucent sit on the canvas, the rest on the page.
-  const floating = ['--overlay', '--hud-bg', '--tip-bg', '--plane-backdrop', '--c-label-bg', '--c-tip-bg'];
+  const floating = ['--overlay', '--hud-bg', '--tip-bg', '--c-label-bg', '--c-tip-bg'];
   const base = floating.includes(name) ? opaque(theme, '--c-background', [0, 0, 0]) : opaque(theme, '--panel', [0, 0, 0]);
   return opaque(theme, name, base);
 };
@@ -143,7 +142,6 @@ const TEXT: [string, string[]][] = [
   ['--purple', ['--panel', '--panel-2', '--field']],
   ['--on-primary', ['--primary', '--primary-hover']],
   ['--on-pill', ['--pill-bg']],
-  ['--plane-ink', ['--plane-backdrop']],
   ['--c-dimension', ['--c-background', '--c-label-bg', '--c-tip-bg']],
   ['--c-dimension-muted', ['--c-background', '--c-label-bg']],
   ['--c-error', ['--c-background', '--c-label-bg', '--c-badge-bad-fill']],

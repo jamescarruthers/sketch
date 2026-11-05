@@ -10,8 +10,7 @@ test('boots, creates a sketch, draws a rectangle', async ({ page }) => {
   await u.shot('smoke-design');
   await page.getByRole('button', { name: 'Create Sketch' }).first().click();
   await u.shot('smoke-plane');
-  await page.locator('.plane[data-plane="XY"] polygon').click();
-  await u.settle();
+  await u.pickPlane('XY');
   await u.shot('smoke-sketch');
   await u.press('r');
   await u.click({ x: 10, y: 10 });
