@@ -16,6 +16,7 @@ import { dimensionColor, drawDimension, labelSize, layoutDimension, type DimLayo
 import { drawAxes, drawGrid } from './grid';
 import { drawBadge, drawInference, drawOrigin, layoutBadges, type Badge } from './glyphs';
 import { Painter, type Stroke } from './painter';
+import { drawCube } from './viewcube';
 
 export type Label = DimLayout & { w: number; h: number };
 
@@ -61,6 +62,7 @@ export class Renderer {
     g.fillRect(0, 0, canvas.width, canvas.height);
     if (app.scene) {
       this.renderScene(app.scene);
+      this.drawCube();
       return;
     }
     if (app.settings.grid) drawGrid(g, view);
@@ -91,6 +93,14 @@ export class Renderer {
       app.drawToolLayer(p, app.settings.showConstraints ? OVERLAYS : OVERLAYS.filter((o) => o !== fixOverlay));
       this.drawInference(p);
     }
+    this.drawCube();
+  }
+
+  /** The ViewCube over everything, turned as the camera is, where the panels leave room for it. */
+  private drawCube(): void {
+    const { app, g } = this;
+    const layout = app.placeCube();
+    if (layout) drawCube(g, app.view.dpr, app.cubeTurn(), layout, app.cubeHover);
   }
 
   /**

@@ -104,6 +104,9 @@ svg { display: block; }
 .home-view, .orbit-view { position: absolute; left: 10px; bottom: 10px; z-index: 3; width: 28px; height: 28px; background: var(--field); border-radius: 3px; box-shadow: var(--shadow-chip); }
 .orbit-view { left: 44px; }
 .orbit-view[aria-pressed='true'] { background: var(--accent-soft); }
+/* The ViewCube is drawn on the canvas; its Home icon sits just outside the top left of the square it takes (App.placeCube). */
+.cube-home { position: absolute; z-index: 3; width: 18px; height: 18px; color: var(--ink-2); border-radius: 3px; }
+.cube-home svg { width: 14px; height: 14px; }
 .tree-row.found { background: var(--accent-soft); }
 
 .browser, .palette, .layers { background: var(--overlay); border: 1px solid var(--line); box-shadow: var(--shadow); user-select: none; }

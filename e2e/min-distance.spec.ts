@@ -529,14 +529,15 @@ test.describe('the bar does not shift', () => {
     test(`at ${size.width} x ${size.height}: the other items keep their place and nothing overflows`, async ({ page }) => {
       await page.setViewportSize(size);
       const u = await start(page);
-      await points(u, { x: 10, y: 10 }, { x: 40, y: 50 });
+      // Below the middle: at 900 x 600 the ViewCube is over (40, 50).
+      await points(u, { x: 10, y: 10 }, { x: 40, y: -30 });
       await u.press('Escape');
       const box = async (sel: string) => page.locator(sel).evaluate((e) => {
         const r = e.getBoundingClientRect();
         return { x: r.x, y: r.y, w: r.width, h: r.height };
       });
       const before = { state: await box('.status-state'), coords: await box('.status-coords'), measure: await box('.status-measure'), bar: await box('.statusbar') };
-      await pick(u, { x: 10, y: 10 }, { x: 40, y: 50 });
+      await pick(u, { x: 10, y: 10 }, { x: 40, y: -30 });
       await expect(readout(page)).toHaveText(mm(50));
       const after = { state: await box('.status-state'), coords: await box('.status-coords'), measure: await box('.status-measure'), bar: await box('.statusbar') };
       expect(after.state).toEqual(before.state);

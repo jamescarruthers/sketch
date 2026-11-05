@@ -379,13 +379,46 @@ hold and circles seen at a slant are ellipses. The origin planes and axes are dr
 in 3D, orthographic, with the origin planes and X, Y, Z axes faint; the planes are squares from the
 origin, about half way to the furthest geometry (20 mm with none). Drag orbits (across turns about Z, up
 and down tilts); the wheel zooms at the cursor and a two-finger drag or middle drag pans, as in plan.
-Home View and `F6` go to the isometric Home, from front right above (+X, -Y, +Z), round everything shown
-and the plane squares. Clicking a sketch's geometry, or its row in the browser, edits it, the camera
+Home View, `F6` and the ViewCube's Home icon go to the isometric Home, from front right above
+(+X, -Y, +Z), round everything shown and the plane squares. Clicking a sketch's geometry, or its row in the browser, edits it, the camera
 swinging round to face it: at the view it was last left in this session; else, from design mode, at the
 last sketch's view (4 px/mm on the origin at first) as design mode's plan used to give it, when any of
 it shows there; else fitted to it, clear of the panels Sketch mode shows. Opened from
 a sketch, `V` again or `Esc` goes back to it, facing it as it was; tools and most keys wait while it is
 open, and Undo, Redo, Save, Open, New, Print still work. A new or opened design goes to Home.
+
+*ViewCube* [fusion, user] (`src/app/viewcube.ts`, drawn by `src/render/viewcube.ts`). A cube in the
+canvas's top right, 8 px in, in a 100 px square (56 px across a face, about 92 px corner to corner), with
+a small Home icon just outside its top left. In Sketch mode it sits 8 px left of the Sketch Palette, and
+it steps left of any dialog, rescue note or toolbox that would cover it there; where that would run into
+the browser on the left it is not shown. It turns with the camera, swings included, drawn orthographic,
+with the faces turned away culled, so one face shows looking straight at it, two from an edge, three from
+a corner. Z is up: FRONT is the -Y face, seen looking from -Y toward +Y, RIGHT is +X and TOP is +Z, so
+Home shows the FRONT, RIGHT and TOP corner. The labels are full words, TOP, BOTTOM, FRONT, BACK, LEFT,
+RIGHT, laid on their faces: the sides read upright with Z up, TOP upright from FRONT (+Y up the screen),
+BOTTOM upright from FRONT turned under (-Y up the screen). A short X, Y, Z triad in the axis colours runs
+from the cube's origin corner (-X, -Y, -Z) along its edges, drawn over the faces so none is hidden. In
+Sketch mode the cube faces the sketch's plane as the world has it: on a sketch folded onto y = 10, facing
++Y with -Z up the screen, it shows BACK, upside down. Its colours are tokens of their own: `--c-cube-face`,
+`--c-cube-edge`, `--c-cube-ink` (labels) and `--c-cube-hover`, quiet greys with a pale blue hover, each
+with a Dark value.
+
+Picking goes through the cube's own projection: a ray along the view against the faces turned toward it.
+Each face is cut into nine: its middle is the face, and a band 15% of its width in from each side is the
+edge there, and where two bands cross, the corner, so the 6 faces, 12 edges and 8 corners are 26 targets,
+and from straight on a face its edges and corners are its border. The part under the cursor lights in
+`--c-cube-hover`, on every face that shows it, and the cube takes the cursor from the canvas: nothing
+under it lights. A click swings the camera to look from there (`targetTurn`), about the middle of the
+view at the same zoom, with the usual animation: a face straight on, an edge at 45 degrees between its
+two faces, a corner isometric (top front right is Home), all with Z up the screen. TOP and BOTTOM keep the
+spin there is, the screen's right turned the least way onto the new view, when that is square to X or Y;
+otherwise TOP has +Y up the screen and BOTTOM -Y, as their labels read. A drag on the cube orbits, as one
+on the view does. The Home icon is Home View. From a sketch, in plan, a click on the cube opens the Orbit
+view looking from there, round everything shown, as `V` opens it, and a drag on it opens the Orbit view
+there and then, looking the same way, and turns it; the Home icon opens it at Home. `V` or Esc goes back to
+the sketch. While a plane is picked for Create Sketch or Redefine Sketch Plane the cube still works, to
+turn round to a plane; a click on it picks no plane, and Esc still cancels the pick. The cube has no roll
+arrows and no menu of its own: a right-click on it is the canvas's.
 
 **Sketch mode** [ref]: contextual Sketch tab highlighted, with panels Create, Modify, Constraints,
 Select, Finish Sketch (green check). The Sketch Palette floats top right. Finish Sketch appears on
@@ -412,6 +445,8 @@ Start the tool loop: `select` is the default tool. Every tool ends back in `sele
 | Two-finger drag on a trackpad [user] | Pan, also during a tool |
 | Pinch on a trackpad [user] | Zoom at cursor |
 | Middle drag, or Space+drag | Pan |
+| Click on the ViewCube [fusion] | Swing to look from that face, edge or corner; from a sketch, the Orbit view that way (section 5) |
+| Left drag on the ViewCube [fusion] | Orbit; from a sketch, the Orbit view first |
 
 The three arrive as `wheel` events and are told apart in `src/app/wheel.ts` from what the event
 carries. `ctrlKey` is a pinch (or Ctrl and a wheel). A `deltaMode` of lines or pages is a wheel. A
